@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 1.1.0 — 2026-11-14
+
+- Installs itself per user (no admin) to `%LOCALAPPDATA%\Programs\Sakin`, with a Start menu shortcut and an
+  entry in Installed apps. Running a newer exe updates it.
+- Uninstall from Installed apps: restores every app, then removes the program, startup entry, shortcut and settings.
+- `--portable` to run without installing.
+- Starting with Windows stays on by default and follows the installed location.
+
 ## 1.0.0 — 2026-11-14
 
 First release.

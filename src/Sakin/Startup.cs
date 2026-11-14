@@ -48,8 +48,9 @@ internal static class Startup
     public static bool RunTask() => TaskExists() && Run("schtasks.exe", $"/Run /TN {TaskName}", false, true) == 0;
 
     /// <summary>Creates/updates the elevated task. Prompts UAC if we aren't admin. True on success.</summary>
-    public static bool InstallTask(bool atLogon)
+    public static bool InstallTask(bool atLogon, string? exe = null)
     {
+        exe ??= Exe;
         string user = WindowsIdentity.GetCurrent().Name;
         string xml = $"""
 <?xml version="1.0" encoding="UTF-16"?>
@@ -75,7 +76,7 @@ internal static class Startup
     <Priority>5</Priority>
   </Settings>
   <Actions Context="Author">
-    <Exec><Command>{System.Security.SecurityElement.Escape(Exe)}</Command><Arguments>--tray --elevated-start</Arguments></Exec>
+    <Exec><Command>{System.Security.SecurityElement.Escape(exe)}</Command><Arguments>--tray --elevated-start</Arguments></Exec>
   </Actions>
 </Task>
 """;

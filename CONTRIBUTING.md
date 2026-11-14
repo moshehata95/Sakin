@@ -13,7 +13,8 @@ powershell -File build.ps1        # builds Sakin.exe in the repo root
 Sakin.exe --selftest out.txt      # all checks should pass
 ```
 
-For quick iteration: `dotnet build src/Sakin -c Debug`, then run the exe from `src/Sakin/bin/Debug/...`.
+For quick iteration: `dotnet build src/Sakin -c Debug`, then run the exe from `src/Sakin/bin/Debug/...` with
+`--portable` (without it, any copy that isn't the installed one installs itself over your installed Sakin).
 `Sakin.exe --quit` stops a running copy cleanly and restores every app.
 
 ## Working on the interface

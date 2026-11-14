@@ -48,9 +48,15 @@ background apps (renders, exports) at full speed. The real difference is in memo
 
 1. Download `Sakin.exe` from the [latest release](../../releases/latest). It's a single self-contained file;
    no .NET install needed.
-2. Run it. The window opens and Sakin settles next to the clock. It starts with Windows from then on (you can
-   switch that off in Settings).
+2. Run it. Sakin installs itself for your user (no admin prompt) to `%LOCALAPPDATA%\Programs\Sakin`, adds itself
+   to the Start menu and to *Settings › Apps › Installed apps*, and starts with Windows from then on.
+   You can switch that off in Settings. You can delete the downloaded file afterwards.
 3. Close the window whenever you like. Sakin keeps working in the tray using about 35 MB.
+
+**Updating:** run a newer `Sakin.exe` the same way; it replaces the installed copy and keeps your settings.
+**Uninstalling:** *Settings › Apps › Installed apps › Sakin › Uninstall*. Every app is put back to normal first,
+then the program, its startup entry, shortcut and settings are removed.
+**Portable:** `Sakin.exe --portable` runs it from wherever it is without installing.
 
 Requires Windows 11 (or Windows 10 21H2+) on x64, plus the Microsoft Edge WebView2 runtime, which ships with Windows 11.
 
@@ -100,7 +106,7 @@ Open the **⋯** menu on any app:
   and on the next start after a crash, every process is put back exactly as it was.
 - Processes started by an app while it was calmed inherit its low priority from Windows. Sakin tracks them and
   gives them normal values when they come to the front.
-- Settings live in `%LOCALAPPDATA%\Sakin\settings.json`.
+- Settings live in `%LOCALAPPDATA%\Sakin\settings.json`; the program in `%LOCALAPPDATA%\Programs\Sakin`.
 - The window's web view only exists while the window is open.
 
 ## Command line
@@ -109,6 +115,8 @@ Open the **⋯** menu on any app:
 Sakin.exe                     open the window (or bring up the running copy)
 Sakin.exe --tray              start in the tray only (used at sign-in)
 Sakin.exe --quit              quit the running copy and restore every app
+Sakin.exe --portable          run without installing
+Sakin.exe --uninstall         remove Sakin (add --quiet to skip the prompts)
 Sakin.exe --selftest out.txt  check every probe and a calm/restore round trip
 ```
 
@@ -135,6 +143,7 @@ src/Sakin/
   TrayApp.cs      tray icon, menu, foreground hook
   MainWindow.cs   WebView2 host and the message bridge
   Startup.cs      start with Windows (Run key, or an elevated scheduled task)
+  Installer.cs    per-user install, update and uninstall
   Settings.cs     settings and presets
   SelfTest.cs     --selftest
   web/            the interface (index.html, style.css, app.js, i18n.js, mock.js)

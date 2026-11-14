@@ -9,6 +9,9 @@ internal static class Program
         bool tray = args.Contains("--tray");
         using var quitSignal = new EventWaitHandle(false, EventResetMode.ManualReset, @"Local\Sakin.Quit");
         if (args.Contains("--quit")) { quitSignal.Set(); return 0; }   // clean exit of the running copy
+        if (args.Contains("--uninstall")) { ApplicationConfiguration.Initialize(); return Installer.Uninstall(args.Contains("--quiet"), quitSignal); }
+        // run from anywhere else: install (or update) per-user and hand over to the installed copy
+        if (!args.Contains("--portable") && !Installer.IsInstalledCopy && Installer.InstallAndRelaunch(args, quitSignal)) return 0;
         quitSignal.Reset();
 
         // One copy only. A second launch just brings the window up.
