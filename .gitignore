@@ -1,0 +1,14 @@
+bin/
+obj/
+.publish/
+.vs/
+*.user
+/Sakin.exe
+tools/bench/out/
+docs/bench/
+docs/selftest.txt
+docs/shot*.png
+docs/debug-*.png
+tools/debug-*.ps1
+*.bak
+*.bak2

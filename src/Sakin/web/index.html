@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sakin</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="app" id="app">
+
+  <header class="bar">
+    <div class="mark">
+      <span class="mark-word" data-t="brand">Sakin</span>
+      <span class="mark-dot" id="markDot" aria-hidden="true"></span>
+    </div>
+
+    <div class="modes" role="radiogroup" id="modes" data-t-aria="intensity">
+      <button role="radio" data-mode="light" data-t="light">Light</button>
+      <button role="radio" data-mode="balanced" data-t="balanced">Balanced</button>
+      <button role="radio" data-mode="strong" data-t="strong">Strong</button>
+      <span class="modes-custom" data-t="custom">Custom</span>
+    </div>
+
+    <div class="bar-end">
+      <div class="pause">
+        <button class="btn-line" id="pauseBtn" aria-haspopup="menu">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5.5 3.5v9M10.5 3.5v9"/></svg>
+          <span id="pauseLabel"></span>
+        </button>
+        <div class="menu" id="pauseMenu" role="menu" hidden>
+          <button role="menuitem" data-min="15" data-t="p15">15 minutes</button>
+          <button role="menuitem" data-min="60" data-t="p60">1 hour</button>
+          <button role="menuitem" data-min="0" data-t="p0">Until I turn it back on</button>
+        </div>
+      </div>
+      <button class="icon-btn" id="settingsBtn" data-t-aria="settings">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 4.5h7M12.5 4.5h1M2.5 11.5h1M6.5 11.5h7"/><circle cx="11" cy="4.5" r="1.5"/><circle cx="5" cy="11.5" r="1.5"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <div class="paused-band" id="pausedBand" hidden>
+    <span id="pausedText"></span>
+    <button class="link" id="resumeBtn" data-t="resume">Resume</button>
+  </div>
+
+  <section class="gauge">
+    <div class="gauge-head">
+      <div class="free">
+        <div class="free-num"><span id="freeNum">—</span><small data-t="gbFree">GB free</small></div>
+        <div class="free-of" id="freeOf"></div>
+      </div>
+      <p class="verdict" id="verdict"></p>
+      <dl class="tallies">
+        <div><dt data-t="reclaimed">Reclaimed today</dt><dd id="tReclaimed">—</dd></div>
+        <div><dt data-t="calmNow">Calmed now</dt><dd id="tCalm">—</dd></div>
+        <div><dt data-t="cpu">CPU</dt><dd id="tCpu">—</dd></div>
+      </dl>
+    </div>
+
+    <div class="strip-wrap">
+      <div class="strip" id="strip"></div>
+      <div class="ticks" id="ticks"></div>
+      <ul class="legend" id="legend"></ul>
+    </div>
+
+    <div class="spark-wrap">
+      <span class="spark-label" data-t="spark">Free memory, last 10 min</span>
+      <svg class="spark" id="spark" viewBox="0 0 600 44" preserveAspectRatio="none" aria-hidden="true"></svg>
+    </div>
+  </section>
+
+  <main class="body">
+    <section class="apps">
+      <div class="apps-head">
+        <div class="tabs" role="tablist" id="tabs">
+          <button role="tab" data-f="all" data-t="tAll">All</button>
+          <button role="tab" data-f="calm" data-t="tCalm">Calmed &amp; asleep</button>
+          <button role="tab" data-f="working" data-t="tWork">Working</button>
+          <button role="tab" data-f="rules" data-t="tRules">My rules</button>
+        </div>
+        <span class="count" id="appCount"></span>
+      </div>
+      <div class="cols" aria-hidden="true">
+        <span data-t="cApp">App</span><span data-t="cState">State</span><span class="num" data-t="cRam">Memory</span><span class="num" data-t="cCpu">CPU</span><span></span>
+      </div>
+      <ol class="rows" id="rows"></ol>
+      <p class="empty" id="empty" hidden></p>
+    </section>
+
+    <aside class="log">
+      <h2 data-t="activity">Activity</h2>
+      <ol id="log"></ol>
+    </aside>
+  </main>
+
+  <div class="scrim" id="scrim" hidden></div>
+  <section class="sheet" id="sheet" aria-hidden="true">
+    <header>
+      <h2 data-t="settings">Settings</h2>
+      <button class="icon-btn" id="sheetClose" data-t-aria="close">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg>
+      </button>
+    </header>
+
+    <div class="sheet-body">
+      <h3 data-t="hRun">Running</h3>
+      <label class="toggle"><input type="checkbox" data-set="startWithWindows"><span class="tg"></span>
+        <span class="tl"><span data-t="sStart">Start with Windows</span><small data-t="sStartD">Starts quietly next to the clock.</small></span></label>
+      <label class="toggle"><input type="checkbox" data-set="elevated"><span class="tg"></span>
+        <span class="tl"><span data-t="sElev">Full permissions</span><small data-t="sElevD">Lets Sakin calm apps that run as administrator. Windows asks once.</small></span></label>
+
+      <h3 data-t="hSmart">Judgement</h3>
+      <label class="toggle"><input type="checkbox" data-set="respectAudio"><span class="tg"></span>
+        <span class="tl"><span data-t="sAudio">Leave apps playing sound alone</span><small data-t="sAudioD">A call, a video or a lecture running in the background.</small></span></label>
+      <label class="toggle"><input type="checkbox" data-set="batteryBoost"><span class="tg"></span>
+        <span class="tl"><span data-t="sBatt">Be stricter on battery</span><small data-t="sBattD">When unplugged, waits less and calms sooner.</small></span></label>
+
+      <h3><span data-t="hNums">Numbers</span> <span class="h3-note" data-t="hNumsD">Changing any of these switches to Custom</span></h3>
+      <div class="num-field">
+        <label data-t="nGrace">Wait before calming an app</label>
+        <div class="stepper"><button data-step="-5" data-for="graceSec">−</button><output data-out="graceSec"></output><span class="unit" data-t="uSec">sec</span><button data-step="5" data-for="graceSec">+</button></div>
+      </div>
+      <div class="num-field">
+        <label data-t="nDormant">Call it asleep after</label>
+        <div class="stepper"><button data-step="-1" data-for="dormantMin">−</button><output data-out="dormantMin"></output><span class="unit" data-t="uMin">min</span><button data-step="1" data-for="dormantMin">+</button></div>
+      </div>
+      <div class="num-field">
+        <label data-t="nTrim">Start reclaiming memory when free drops below</label>
+        <div class="stepper"><button data-step="-5" data-for="trimBelowPct">−</button><output data-out="trimBelowPct"></output><span class="unit">%</span><button data-step="5" data-for="trimBelowPct">+</button></div>
+      </div>
+      <div class="num-field">
+        <label data-t="nCpu">Treat an app as working above this CPU</label>
+        <div class="stepper"><button data-step="-1" data-for="busyCpuPct">−</button><output data-out="busyCpuPct"></output><span class="unit">%</span><button data-step="1" data-for="busyCpuPct">+</button></div>
+      </div>
+      <div class="num-field">
+        <label data-t="nGpu">or above this GPU</label>
+        <div class="stepper"><button data-step="-5" data-for="busyGpuPct">−</button><output data-out="busyGpuPct"></output><span class="unit">%</span><button data-step="5" data-for="busyGpuPct">+</button></div>
+      </div>
+
+      <h3 data-t="hLang">Language</h3>
+      <label class="toggle"><input type="checkbox" data-set="langArabic"><span class="tg"></span>
+        <span class="tl"><span>العربية</span><small data-t="sLangD">Show Sakin in Arabic, right to left.</small></span></label>
+
+      <h3 data-t="hAbout">About</h3>
+      <p class="about" data-t="about"></p>
+      <p class="about dim" id="aboutLine"></p>
+    </div>
+  </section>
+
+  <div class="menu row-menu" id="rowMenu" role="menu" hidden>
+    <span class="menu-title" id="rowMenuTitle"></span>
+    <button role="menuitemradio" data-rule="auto"><span data-t="rAuto">Automatic</span><small data-t="rAutoD">Sakin decides</small></button>
+    <button role="menuitemradio" data-rule="free"><span data-t="rFree">Always full speed</span><small data-t="rFreeD">Like render apps</small></button>
+    <button role="menuitemradio" data-rule="calm"><span data-t="rCalm">Always calm it</span><small data-t="rCalmD">Even when it's using CPU</small></button>
+    <button role="menuitemradio" data-rule="never"><span data-t="rNever">Never touch it</span></button>
+    <hr>
+    <button role="menuitem" data-act="trim" data-t="trimNow">Free its memory now</button>
+  </div>
+
+  <div class="toast" id="toast" role="status" hidden></div>
+</div>
+<script src="i18n.js"></script>
+<script src="mock.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
