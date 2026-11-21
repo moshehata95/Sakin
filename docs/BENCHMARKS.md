@@ -79,6 +79,32 @@ all of its data.
 | Re-reading all its data afterwards | 372 ms | **55 ms** |
 | After stopping Boost | n/a | Normal priority, pin removed |
 
+## Claude mode: `tools/claude-test.ps1`
+
+Run from a Claude Code session, so the test shell is itself a Claude process. Three apps are started *outside*
+Claude (through WMI): Hog1 holds 700 MB, and Bridge and Driven each hold 300 MB and listen on a local port, where
+each byte received makes them work for 1.5 s. Driven is put on the *Claude uses this app* list. Hog3 (300 MB) is
+started by the test shell, so it is Claude's. The linger time is set to 1 minute for the test.
+
+| Step | Result |
+|---|---|
+| Power plan | High performance → *Sakin - Claude mode*: turbo off, never sleeps, lid does nothing, screen off after 120 s |
+| Apps outside Claude, 20 s after turning it on | Hog1, Bridge, Driven: **Idle priority, Efficiency mode, 2 MB in RAM** (from 668 / 337 / 337 MB) |
+| The app Claude started (Hog3) | **Normal, untouched**, 342 MB |
+| Free RAM | 979 MB → **2,318 MB** after a minute |
+| Claude opens a local connection to Bridge | Bridge back to **Normal in 1.6 s**; a 1.5 s request answered in 1,514 ms |
+| Driven starts working (listed app, no connection from Claude) | back to **Normal in 7.3 s** (it needs a few seconds of activity first) |
+| 1 minute after Claude let go | Bridge and Driven **asleep again** |
+| Claude mode off | **High performance back**, Sakin's plan deleted |
+
+Recovery, tested separately: Sakin quit with Claude mode on puts High performance back and switches Claude mode
+on again at the next start. Killed with Claude mode on, the plan stays until the next start, which carries on
+and still restores High performance when Claude mode is turned off.
+
+Found by this test: on Modern Standby laptops Windows hides *High performance* from `powercfg /list` while
+another plan is active, but still switches to it. The first build checked the list, didn't find the plan, and
+fell back to Balanced. It now switches to the old plan first and only falls back if that fails.
+
 ## Self-test: `Sakin.exe --selftest out.txt`
 
 Checks the process table against `Process.GetProcesses()` (names, session, create time, CPU time, parent), runs

@@ -82,6 +82,34 @@ starts while Sakin has it calmed would begin slowed, and Sakin never changed it,
 New processes whose parent is calmed (or itself inherited) are tracked. When they come to the front they get
 normal values, and if they're later calmed their "original" is normal rather than the inherited value.
 
+## Claude mode
+
+While it's on, `Decide` hands every app to `DecideClaude`:
+
+1. **Who is Claude.** Every `claude.exe` in the session is a root (the desktop app, each Claude Code session, the
+   Chrome extension's native host), and every process descended from one joins the set. Parent links are only
+   followed when the parent is older than the child, so a reused pid can't pull a stranger in. An app whose processes
+   are all in the set is *For Claude*. Claude processes that live inside another app's tree (a session in Windows
+   Terminal, the extension host under Chrome) always get level 0, whatever their app's state.
+2. **Who Claude is using.** Every 3 s `TcpProbe` reads the TCP tables (`GetExtendedTcpTable`, IPv4 and IPv6) and
+   pairs the two ends of each established loopback connection. A pair with Claude on one side marks the other
+   side's app as used. Apps on the *Claude uses this app* list, and apps holding a Claude process, are also marked
+   used when their 10-second CPU average is above 2 %, which is how scripting through COM or the browser
+   extension shows up. A used app is *For Claude* until `ClaudeLingerMin` minutes after the last sign.
+3. **Everyone else sleeps**, without the grace period, busy or not, except *Always full speed* rules, protected
+   processes and (if that setting is on) apps playing sound. The window in front only counts as yours when
+   `GetLastInputInfo` shows input in the last 2 minutes.
+
+On entry a first pass trims every quiet sleeping app (4 per tick, during the first minute); after that the normal
+low-memory trimming applies.
+
+**Power.** `PowerPlan` duplicates Windows' Balanced plan as *Sakin - Claude mode* and sets, for AC and battery:
+`STANDBYIDLE` and `HIBERNATEIDLE` 0, `LIDACTION` 0, `VIDEOIDLE` from the setting, and with *Keep the CPU cool*
+`PERFBOOSTMODE` 0 (no turbo), `PROCTHROTTLEMAX` 99 and `PERFEPP` 60. The previous active plan's GUID is stored in
+the settings before switching. Turning Claude mode off, quitting, the next start after a crash and uninstalling all
+switch back to that plan and delete the copy. `powercfg` does all of this without administrator rights. The engine
+thread also holds `ES_SYSTEM_REQUIRED`.
+
 ## Starting with Windows
 
 - Default: `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`, refreshed on every start so it follows the exe if moved.
@@ -94,7 +122,7 @@ normal values, and if they're later calmed their "original" is normal rather tha
 The interface is static HTML/CSS/JS embedded in the exe and served to WebView2 from `https://sakin.app/`
 (intercepted, never on the network). The engine sends a full snapshot about once a second
 (`type: "state"`), app icons once (`type: "icons"`), and toasts. The page sends commands back:
-`setMode`, `pause`, `resume`, `setRule`, `trimNow` and `setSetting`. All words live in `web/i18n.js`. The engine
+`setMode`, `pause`, `resume`, `setRule`, `trimNow`, `boost`, `unboost`, `claude`, `claudeApp`, `screenOff` and `setSetting`. All words live in `web/i18n.js`. The engine
 only sends codes and numbers, so English and Arabic come from the same data.
 
 The WebView2 control is created when the window opens and disposed when it closes, which takes Sakin back to

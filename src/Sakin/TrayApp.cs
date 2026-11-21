@@ -39,6 +39,10 @@ internal sealed class TrayApp : ApplicationContext
             _tray.ShowBalloonTip(2500, "Sakin", on
                 ? T($"Boosting {name}. Everything else is calmed and its RAM freed.", $"بوست لـ {name}. كل الباقي اتهدّى ورامه اتفضّت.")
                 : T($"Boost for {name} is off.", $"البوست لـ {name} وقف."), ToolTipIcon.None));
+        _engine.ClaudeChanged += on => _ui.BeginInvoke(() =>
+            _tray.ShowBalloonTip(3000, "Sakin", on
+                ? T("Claude mode is on. Only Claude and the apps it uses stay awake; the PC won't sleep.", "Claude mode اشتغل. Claude والبرامج اللي بيستخدمها بس صاحيين، والجهاز مش هينام.")
+                : T("Claude mode is off. Your power plan is back.", "Claude mode وقف، وخطة الطاقة بتاعتك رجعت."), ToolTipIcon.None));
 
         _hookProc = (_, _, _, _, _, _, _) => _engine.ForegroundChanged();
         _hook = Native.SetWinEventHook(Native.EVENT_SYSTEM_FOREGROUND, Native.EVENT_SYSTEM_FOREGROUND, IntPtr.Zero,
@@ -68,6 +72,8 @@ internal sealed class TrayApp : ApplicationContext
         string text = _engine.Paused
             ? T("Sakin · paused", "ساكن · واقف")
             : b != null ? T($"Sakin · boosting {b}", $"ساكن · بوست لـ {b}")
+            : _engine.ClaudeOn ? T($"Sakin · Claude mode · Claude {(_engine.ClaudeBusy ? "working" : "quiet")} · {sleep} asleep",
+                $"ساكن · Claude mode · Claude {(_engine.ClaudeBusy ? "شغال" : "هادي")} · {sleep} نايم")
             : T($"Sakin · {avail / 1024:0.0} GB free · {calm + sleep} calmed",
                 $"ساكن · {avail / 1024:0.0} جيجا فاضية · {calm + sleep} هادية");
         _tray.Text = text.Length > 63 ? text[..63] : text;
@@ -103,6 +109,14 @@ internal sealed class TrayApp : ApplicationContext
         boost.Click += (_, _) => _engine.Post(() => _engine.ToggleBoost(null));
         menu.Opening += (_, _) => SetBoostText();
         menu.Items.Add(boost);
+
+        bool claudeOn = _engine.ClaudeOn;
+        var claude = new ToolStripMenuItem(T("Claude mode", "Claude mode")) { Checked = claudeOn, ToolTipText =
+            T("Leave the PC running for Claude: only Claude and the apps it uses stay awake.", "سيب الجهاز شغال لـ Claude: هو والبرامج اللي بيستخدمها بس اللي صاحيين.") };
+        claude.Click += (_, _) => _engine.Post(() => _engine.SetClaudeMode(!claudeOn));
+        menu.Items.Add(claude);
+        if (claudeOn)
+            menu.Items.Add(new ToolStripMenuItem(T("Turn the screen off", "اطفي الشاشة"), null, (_, _) => Task.Delay(700).ContinueWith(_ => Native.ScreenOff())));
         menu.Items.Add(new ToolStripSeparator());
 
         var modes = new ToolStripMenuItem(T("Intensity", "الشدة"));

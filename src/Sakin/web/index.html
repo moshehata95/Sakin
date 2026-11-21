@@ -23,6 +23,10 @@
     </div>
 
     <div class="bar-end">
+      <button class="btn-line" id="claudeBtn" aria-pressed="false">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 5l3 3-3 3M8 11.5h5"/></svg>
+        <span data-t="claudeMode">Claude mode</span>
+      </button>
       <div class="pause">
         <button class="btn-line" id="pauseBtn" aria-haspopup="menu">
           <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5.5 3.5v9M10.5 3.5v9"/></svg>
@@ -49,6 +53,21 @@
     <span class="boost-pip" aria-hidden="true"></span>
     <span id="boostText"></span>
     <button class="btn-line" id="boostStop" data-t="boostStop">Stop boost</button>
+  </div>
+
+  <div class="claude-band" id="claudeBand" hidden>
+    <span class="claude-pip" id="claudePip" aria-hidden="true"></span>
+    <div class="cb-main">
+      <span class="cb-title" id="claudeTitle"></span>
+      <span class="cb-sub" id="claudeSub"></span>
+    </div>
+    <dl class="cb-figs">
+      <div><dt data-t="cbUsing">In use for Claude</dt><dd id="cbUsing">—</dd></div>
+      <div><dt data-t="cbAsleep">Asleep</dt><dd id="cbAsleep">—</dd></div>
+      <div><dt data-t="cbFreed">Freed</dt><dd id="cbFreed">—</dd></div>
+    </dl>
+    <button class="btn-line" id="screenOffBtn" data-t="screenOff">Screen off</button>
+    <button class="btn-line" id="claudeStop" data-t="claudeStop">Stop</button>
   </div>
 
   <section class="gauge">
@@ -145,6 +164,19 @@
         <div class="stepper"><button data-step="-5" data-for="busyGpuPct">−</button><output data-out="busyGpuPct"></output><span class="unit">%</span><button data-step="5" data-for="busyGpuPct">+</button></div>
       </div>
 
+      <h3><span data-t="hClaude">Claude mode</span> <span class="h3-note" data-t="hClaudeD">For leaving the PC running while Claude works</span></h3>
+      <label class="toggle"><input type="checkbox" data-set="claudeCool"><span class="tg"></span>
+        <span class="tl"><span data-t="sCool">Keep the CPU cool</span><small data-t="sCoolD">Runs without turbo while Claude mode is on. Much less heat and fan noise over days; long builds take a little longer.</small></span></label>
+      <div class="num-field">
+        <label data-t="nLinger">Keep an app awake after Claude stops using it</label>
+        <div class="stepper"><button data-step="-1" data-for="claudeLingerMin">−</button><output data-out="claudeLingerMin"></output><span class="unit" data-t="uMin">min</span><button data-step="1" data-for="claudeLingerMin">+</button></div>
+      </div>
+      <div class="num-field">
+        <label data-t="nScreen">Turn the screen off after</label>
+        <div class="stepper"><button data-step="-1" data-for="claudeScreenOffMin">−</button><output data-out="claudeScreenOffMin"></output><span class="unit" data-t="uMin">min</span><button data-step="1" data-for="claudeScreenOffMin">+</button></div>
+      </div>
+      <p class="claude-note" data-t="claudeNote"></p>
+
       <h3 data-t="hLang">Language</h3>
       <label class="toggle"><input type="checkbox" data-set="langArabic"><span class="tg"></span>
         <span class="tl"><span>العربية</span><small data-t="sLangD">Show Sakin in Arabic, right to left.</small></span></label>
@@ -163,6 +195,8 @@
     <button role="menuitemradio" data-rule="free"><span data-t="rFree">Always full speed</span><small data-t="rFreeD">Like render apps</small></button>
     <button role="menuitemradio" data-rule="calm"><span data-t="rCalm">Always calm it</span><small data-t="rCalmD">Even when it's using CPU</small></button>
     <button role="menuitemradio" data-rule="never"><span data-t="rNever">Never touch it</span></button>
+    <hr>
+    <button role="menuitemcheckbox" data-act="claudeApp"><span data-t="claudeApp">Claude uses this app</span><small data-t="claudeAppD">In Claude mode it wakes when Claude works in it</small></button>
     <hr>
     <button role="menuitem" data-act="trim" data-t="trimNow">Free its memory now</button>
   </div>

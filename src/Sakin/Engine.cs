@@ -87,6 +87,9 @@ internal sealed class Engine : IDisposable
         public string BusyWhy = "";
         public double BusyPct;
         public double Cpu30 = 100;
+        public double Cpu10;
+        public bool HasClaude;           // Claude mode: some of its processes belong to Claude
+        public long LingerSec;           // Claude mode: seconds before an app Claude used goes back to sleep
         public long EmptySince;
         public double PinnedMB;
         public string State = "";
@@ -145,6 +148,30 @@ internal sealed class Engine : IDisposable
     public volatile string? BoostName;
     public volatile string LastAppName = "";
     int _logId;
+
+    // ---------------- Claude mode ----------------
+    // The PC is left running for Claude Code. Claude and everything it starts runs normally; an app
+    // Claude is using (a local connection to it, or activity in an app Claude drives) wakes up and stays
+    // awake for a few minutes after; everything else sleeps, even the window in front when nobody is
+    // at the keyboard. A power plan keeps the PC awake with the screen off and the CPU cool.
+    static readonly HashSet<string> Terminals = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "windowsterminal", "openconsole", "wezterm-gui", "alacritty", "code", "cursor", "windsurf", "hyper", "tabby",
+        "mintty", "conemu64", "cmd", "pwsh", "powershell", "warp",
+    };
+    const long PresentMs = 120_000;      // input within this long = you're at the PC
+    const double ClaudeWakeCpu = 2.0;    // an app Claude drives counts as used above this CPU (10 s average)
+    bool _claudeOn;
+    long _claudeSince, _lastTcpMs, _claudeLastBusy;
+    bool _claudeFirstPassDone, _userPresent = true;
+    double _claudeFreedMB, _claudeCpu;
+    string _claudePlanError = "";
+    HashSet<int> _claudePids = new();
+    readonly Dictionary<string, long> _claudeUsedAt = new(StringComparer.OrdinalIgnoreCase);
+    public volatile bool ClaudeOn;
+    public volatile bool ClaudeBusy;
+    public event Action<bool>? ClaudeChanged;
+
     public bool Paused { get; private set; }
     long _pausedUntil; // unix ms, 0 = until resumed
     public volatile bool UiAttached;
@@ -169,6 +196,8 @@ internal sealed class Engine : IDisposable
     {
         RestoreFromJournal();
         Log("info", "start", "", _admin ? 1 : 0, _s.Mode);
+        if (_s.ClaudeMode) Post(() => SetClaudeMode(true));                 // it was on when ساكن last stopped
+        else if (_s.ClaudeScheme != "") PowerPlan.Leave(_s);                  // left over from a crash
         _thread.Start();
     }
 
@@ -242,7 +271,10 @@ internal sealed class Engine : IDisposable
         // ---- group processes into apps ----
         _self = Descendants(_selfPid);
         var self = _self;
-        foreach (var g in _groups.Values) { g.Procs.Clear(); g.PrivateMB = 0; g.Cpu = 0; g.Gpu = 0; g.Audio = false; }
+        _claudePids = _claudeOn ? ClaudeTree(self) : new HashSet<int>();
+        double claudeCpu = 0;
+        var pidGroup = new Dictionary<int, Group>();
+        foreach (var g in _groups.Values) { g.Procs.Clear(); g.PrivateMB = 0; g.Cpu = 0; g.Gpu = 0; g.Audio = false; g.HasClaude = false; }
         var seenCpu = new HashSet<(int, long)>();
         foreach (var r in rows)
         {
@@ -255,6 +287,9 @@ internal sealed class Engine : IDisposable
                 _groups[key] = g;
             }
             g.Procs.Add(r);
+            pidGroup[r.Pid] = g;
+            bool isClaude = _claudePids.Contains(r.Pid);
+            if (isClaude) g.HasClaude = true;
             if (!_prevCpu.ContainsKey((r.Pid, r.CreateTime)) && !_inherited.ContainsKey(r.Pid)
                 && _byPid.TryGetValue(r.ParentPid, out var par) && par.CreateTime <= r.CreateTime
                 && ((_tweaks.TryGetValue(par.Pid, out var pt) && pt.Create == par.CreateTime && pt.Level > 0)
@@ -266,7 +301,11 @@ internal sealed class Engine : IDisposable
             if (!fgOnly)
             {
                 if (_prevCpu.TryGetValue(id, out long prev) && r.CpuTime >= prev)
-                    g.Cpu += (r.CpuTime - prev) / 10_000.0 / elapsed / _cpus * 100.0;
+                {
+                    double pcpu = (r.CpuTime - prev) / 10_000.0 / elapsed / _cpus * 100.0;
+                    g.Cpu += pcpu;
+                    if (isClaude) claudeCpu += pcpu;
+                }
                 _prevCpu[id] = r.CpuTime;
             }
             if (_gpuByPid.TryGetValue(r.Pid, out double gp)) g.Gpu = Math.Max(g.Gpu, gp);
@@ -277,6 +316,28 @@ internal sealed class Engine : IDisposable
         {
             foreach (var k in _prevCpu.Keys.Where(k => !seenCpu.Contains(k)).ToList()) _prevCpu.Remove(k);
             foreach (var k in _keyCache.Keys.Where(k => !seenCpu.Contains(k)).ToList()) _keyCache.Remove(k);
+        }
+
+        if (_claudeOn)
+        {
+            _userPresent = Native.IdleInputMs() < PresentMs;
+            if (!fgOnly)
+            {
+                _claudeCpu = claudeCpu;
+                if (claudeCpu >= 0.5) _claudeLastBusy = now;
+                ClaudeBusy = now - _claudeLastBusy < 60_000;
+                // a live local connection between Claude and an app: Claude is using that app
+                if (ms - _lastTcpMs >= 3000)
+                {
+                    _lastTcpMs = ms;
+                    foreach (var (a, b) in TcpProbe.LoopbackPairs())
+                    {
+                        bool ca = _claudePids.Contains(a), cb = _claudePids.Contains(b);
+                        if (ca == cb) continue;
+                        if (pidGroup.TryGetValue(ca ? b : a, out var used)) MarkClaudeUsed(used, now);
+                    }
+                }
+            }
         }
 
         // drop apps that closed; forget tweaks of dead processes
@@ -308,17 +369,28 @@ internal sealed class Engine : IDisposable
             if (g.Procs.Count == 0) { g.State = ""; continue; }
             if (g.Name == "") Describe(g);
             if (!fgOnly) UpdateBusy(g, ms);
+            // an app Claude drives (by script, through its extension) shows it by working
+            if (_claudeOn && !fgOnly && !g.HasClaude && g.Cpu10 > ClaudeWakeCpu && _s.ClaudeApps.Contains(g.Key, StringComparer.OrdinalIgnoreCase))
+                MarkClaudeUsed(g, now);
+            if (_claudeOn && !fgOnly && g.HasClaude && !Terminals.Contains(g.Key) && g.Cpu10 > ClaudeWakeCpu
+                && !g.Procs.All(p => _claudePids.Contains(p.Pid)))
+                MarkClaudeUsed(g, now);   // e.g. Chrome with Claude's extension connected
             string prev = g.State;
             Decide(g, now, graceMs, dormantMs);
             if (prev != g.State) OnTransition(g, prev);
             int level = g.State switch { "calm" => 1, "sleep" => 2, "boost" => 3, _ => 0 };
-            foreach (var p in g.Procs) Apply(p, level);
+            // Claude's own processes inside another app (its Chrome extension host, a session in a terminal) run normally
+            foreach (var p in g.Procs) Apply(p, level > 0 && _claudePids.Contains(p.Pid) ? 0 : level);
         }
 
         if (!fgOnly && !Paused)
         {
             if (_boostKey != null) { PinBoosted(ms); FreeForBoost(now); }
-            else TrimIfShort(now);
+            else
+            {
+                if (_claudeOn) FreeForClaude(now);
+                TrimIfShort(now);
+            }
         }
 
         if (_journalDirty) SaveJournal();
@@ -347,6 +419,7 @@ internal sealed class Engine : IDisposable
         if (n10 == 0) return;
         c10 /= n10; g10 /= n10; c30 /= n30; g30 /= n30;
         g.Cpu30 = g.Samples.Count >= 10 ? c30 : 100;
+        g.Cpu10 = g.Samples.Count >= 3 ? c10 : 0;
         // need a few seconds of history before calling something busy
         bool enough = g.Samples.Count >= 4;
         if (!g.Busy && enough && (c10 > _s.BusyCpuPct || g10 > _s.BusyGpuPct)) g.Busy = true;
@@ -367,7 +440,9 @@ internal sealed class Engine : IDisposable
         g.Reason = "";
         g.Locked = false;
 
+        g.LingerSec = 0;
         if (g.Key == _boostKey) { g.SeenFg = true; g.LastActive = now; g.State = "boost"; return; }
+        if (_claudeOn && !Paused) { DecideClaude(g, now, rule); return; }
         if (g.Key == _fgKey) { g.SeenFg = true; g.LastActive = now; g.State = "fg"; return; }
         if (g.Guard) { g.State = "guard"; g.Reason = GuardReason.GetValueOrDefault(g.Key, "system"); return; }
         if (rule == "never") { g.State = "guard"; g.Reason = "rule-never"; return; }
@@ -387,8 +462,125 @@ internal sealed class Engine : IDisposable
         g.State = idle >= dormantMs ? "sleep" : "calm";
     }
 
+    void DecideClaude(Group g, long now, string? rule)
+    {
+        // you came back to the PC: the window you're using works as always
+        if (g.Key == _fgKey && _userPresent) { g.SeenFg = true; g.LastActive = now; g.State = "fg"; return; }
+        if (g.Procs.Count > 0 && g.Procs.All(p => _claudePids.Contains(p.Pid)))
+        {
+            g.State = "claude"; g.Reason = g.Key == "claude" ? "claude-self" : "claude-tool"; g.LastActive = now; return;
+        }
+        if (g.Guard) { g.State = "guard"; g.Reason = GuardReason.GetValueOrDefault(g.Key, "system"); return; }
+        if (rule == "never") { g.State = "guard"; g.Reason = "rule-never"; return; }
+        // the terminal (or editor) a Claude session runs in
+        if (g.HasClaude && Terminals.Contains(g.Key)) { g.State = "claude"; g.Reason = "claude-host"; g.LastActive = now; return; }
+        if (!Managed(g)) { g.State = ""; return; }
+        if (!_admin && !CanTouch(g.RootPid)) { g.State = "locked"; g.Locked = true; return; }
+        if (rule == "free") { g.State = "work"; g.Reason = "rule-free"; g.LastActive = now; return; }
+        long linger = _s.ClaudeLingerMin * 60_000L;
+        if (rule != "calm" && _claudeUsedAt.TryGetValue(g.Key, out long used) && now - used < linger)
+        {
+            g.State = "claude"; g.Reason = "claude-uses"; g.LingerSec = (linger - (now - used) + 999) / 1000; g.LastActive = now; return;
+        }
+        if (rule != "calm" && g.Audio && _s.RespectAudio) { g.State = "work"; g.Reason = "audio"; g.LastActive = now; return; }
+        g.State = "sleep"; g.Reason = "claude-away";
+    }
+
+    void MarkClaudeUsed(Group g, long now)
+    {
+        if (g.Guard || g.Key == "sakin") return;
+        _claudeUsedAt[g.Key] = now;
+    }
+
+    /// <summary>Every process that is Claude: each claude.exe (the app, a session, its browser host) and everything they start.</summary>
+    HashSet<int> ClaudeTree(HashSet<int> self)
+    {
+        var set = new HashSet<int>();
+        foreach (var r in _byPid.Values)
+            if (r.Name == "claude" && r.SessionId == _session && !self.Contains(r.Pid)) set.Add(r.Pid);
+        if (set.Count == 0) return set;
+        bool grew = true;
+        while (grew)
+        {
+            grew = false;
+            foreach (var r in _byPid.Values)
+                if (!set.Contains(r.Pid) && set.Contains(r.ParentPid) && !self.Contains(r.Pid)
+                    && _byPid.TryGetValue(r.ParentPid, out var p) && p.CreateTime <= r.CreateTime)
+                { set.Add(r.Pid); grew = true; }
+        }
+        return set;
+    }
+
+    /// <summary>On entering Claude mode, every quiet app that went to sleep hands its RAM back once, a few per second.</summary>
+    void FreeForClaude(long now)
+    {
+        if (_claudeFirstPassDone) return;
+        var batch = _groups.Values
+            .Where(g => g.State == "sleep" && g.Reason == "claude-away" && g.PrivateMB >= MinTrimMB && g.Cpu30 < 1.0 && g.LastTrim < _claudeSince)
+            .OrderByDescending(g => g.PrivateMB).Take(4).ToList();
+        foreach (var g in batch) _claudeFreedMB += Trim(g, now);
+        // keep going while new quiet apps appear in the first minute
+        if (batch.Count == 0 && now - _claudeSince > 60_000)
+        {
+            _claudeFirstPassDone = true;
+            if (_claudeFreedMB >= 1) Log("trim", "claudeFreed", "", _claudeFreedMB);
+        }
+    }
+
+    public void SetClaudeMode(bool on)
+    {
+        if (on == _claudeOn) return;
+        long now = UnixMs;
+        if (on)
+        {
+            if (Paused) Resume();
+            _claudeOn = true;
+            ClaudeOn = true;
+            _claudeSince = now;
+            _claudeLastBusy = now;
+            _claudeFirstPassDone = false;
+            _claudeFreedMB = 0;
+            _claudeUsedAt.Clear();
+            _s.ClaudeMode = true;
+            _claudePlanError = PowerPlan.Enter(_s) ?? "";
+            _s.Save();
+            Native.SetThreadExecutionState(Native.ES_CONTINUOUS | Native.ES_SYSTEM_REQUIRED);   // the engine thread lives as long as ساكن
+            Log("claude", "claudeOn", "", 0, _claudePlanError == "" ? "" : "noplan");
+        }
+        else
+        {
+            _claudeOn = false;
+            ClaudeOn = false;
+            ClaudeBusy = false;
+            _s.ClaudeMode = false;
+            PowerPlan.Leave(_s);
+            _s.Save();
+            Native.SetThreadExecutionState(Native.ES_CONTINUOUS);
+            // back to the normal rules, with a short grace so nothing is slammed at once
+            foreach (var g in _groups.Values) if (g.Reason is "claude-away" or "claude-uses") g.LastActive = Math.Max(g.LastActive, now - _s.GraceSec * 1000L + 5000);
+            Log("info", "claudeOff");
+        }
+        ClaudeChanged?.Invoke(on);
+        ModeChanged?.Invoke();
+    }
+
+    public void SetClaudeApp(string key, bool on)
+    {
+        _s.ClaudeApps.RemoveAll(k => k.Equals(key, StringComparison.OrdinalIgnoreCase));
+        if (on) _s.ClaudeApps.Add(key.ToLowerInvariant());
+        _s.Save();
+        string name = _groups.TryGetValue(key, out var g) ? g.Name : key;
+        Log("info", on ? "claudeAppOn" : "claudeAppOff", name);
+    }
+
     void OnTransition(Group g, string prev)
     {
+        if (g.Reason == "claude-uses" && g.State == "claude" && prev == "sleep") { Log("claude", "claudeUses", g.Name); return; }
+        if (g.State == "sleep" && g.Reason == "claude-away")
+        {
+            if (prev == "claude") Log("calm", "claudeDone", g.Name, _s.ClaudeLingerMin);
+            return;
+        }
         switch (g.State)
         {
             case "calm" when prev == "wait" || prev == "work": Log("calm", "calmed", g.Name); break;
@@ -763,6 +955,14 @@ internal sealed class Engine : IDisposable
 
     public void SetNumber(string key, int value)
     {
+        if (key is "claudeLingerMin" or "claudeScreenOffMin")
+        {
+            if (key == "claudeLingerMin") _s.ClaudeLingerMin = value; else _s.ClaudeScreenOffMin = value;
+            _s.Clamp();
+            _s.Save();
+            if (_claudeOn && key == "claudeScreenOffMin") PowerPlan.Apply(_s);
+            return;
+        }
         switch (key)
         {
             case "graceSec": _s.GraceSec = value; break;
@@ -784,6 +984,7 @@ internal sealed class Engine : IDisposable
         {
             case "respectAudio": _s.RespectAudio = value; break;
             case "batteryBoost": _s.BatteryBoost = value; break;
+            case "claudeCool": _s.ClaudeCool = value; _s.Save(); if (_claudeOn) PowerPlan.Apply(_s); return;
             case "langArabic": _s.Lang = value ? "ar" : "en"; _s.Save(); ModeChanged?.Invoke(); return;
             default: return;
         }
@@ -1017,7 +1218,7 @@ internal sealed class Engine : IDisposable
         var by = new Dictionary<string, double> { ["fg"] = 0, ["work"] = 0, ["calm"] = 0, ["sleep"] = 0 };
         foreach (var g in _groups.Values)
         {
-            string b = g.State switch { "fg" or "wait" or "boost" => "fg", "work" => "work", "calm" => "calm", "sleep" => "sleep", _ => "" };
+            string b = g.State switch { "fg" or "wait" or "boost" => "fg", "work" or "claude" => "work", "calm" => "calm", "sleep" => "sleep", _ => "" };
             if (b != "") by[b] += g.PrivateMB;
         }
         double used = _totalMB - _availMB;
@@ -1037,6 +1238,8 @@ internal sealed class Engine : IDisposable
             idleSec = Math.Max(0, (now - g.LastActive) / 1000),
             trimmedMB = Math.Round(g.TrimmedMB),
             pinnedMB = Math.Round(g.PinnedMB),
+            lingerSec = g.LingerSec,
+            claudeApp = _s.ClaudeApps.Contains(g.Key, StringComparer.OrdinalIgnoreCase),
         }).ToList();
 
         var snap = new
@@ -1048,6 +1251,19 @@ internal sealed class Engine : IDisposable
             selfMB = _byPid.TryGetValue(_selfPid, out var meRow) ? meRow.PrivateBytes / 1048576.0 : 0,
             mode = _s.Mode,
             boost = _boostKey == null ? null : new { key = _boostKey, name = BoostName, since = _boostSince, freedMB = Math.Round(_boostFreedMB), firstPassDone = _boostFirstPassDone },
+            claude = !_claudeOn ? null : new
+            {
+                since = _claudeSince,
+                busy = ClaudeBusy,
+                quietSec = Math.Max(0, (now - _claudeLastBusy) / 1000),
+                cpu = Math.Round(_claudeCpu, 1),
+                ramMB = Math.Round(_groups.Values.Where(g => g.State == "claude").Sum(g => g.PrivateMB)),
+                asleep = _groups.Values.Count(g => g.State == "sleep" && g.Reason == "claude-away"),
+                using_ = _groups.Values.Count(g => g.State == "claude"),
+                freedMB = Math.Round(_claudeFreedMB),
+                present = _userPresent,
+                plan = _claudePlanError == "",
+            },
             paused = Paused,
             pausedUntil = _pausedUntil == 0 ? (long?)null : _pausedUntil,
             settings = new
@@ -1056,6 +1272,7 @@ internal sealed class Engine : IDisposable
                 busyCpuPct = _s.BusyCpuPct, busyGpuPct = _s.BusyGpuPct,
                 startWithWindows = _s.StartWithWindows, elevated = _s.Elevated,
                 respectAudio = _s.RespectAudio, batteryBoost = _s.BatteryBoost, lang = _s.Lang,
+                claudeLingerMin = _s.ClaudeLingerMin, claudeScreenOffMin = _s.ClaudeScreenOffMin, claudeCool = _s.ClaudeCool,
             },
             mem = new { totalMB = _totalMB, availMB = _availMB, byState = by },
             cpu = _cpuTotal,
@@ -1080,6 +1297,8 @@ internal sealed class Engine : IDisposable
         _wake.Set();
         _thread.Join(3000);
         RestoreAll();
+        // the power plan goes back too; ClaudeMode stays on in the settings, so it resumes at the next start
+        if (_claudeOn) { PowerPlan.Leave(_s); Native.SetThreadExecutionState(Native.ES_CONTINUOUS); }
         _s.Save();
         _gpu.Dispose();
     }

@@ -9,7 +9,8 @@
   let mode = "balanced", paused = false, pausedUntil = null, logId = 9;
   const settings = { graceSec: 30, dormantMin: 10, trimBelowPct: 20, busyCpuPct: 6, busyGpuPct: 15,
     startWithWindows: true, elevated: false, respectAudio: true, batteryBoost: true,
-    lang: new URLSearchParams(location.search).get("lang") || "en" };
+    lang: new URLSearchParams(location.search).get("lang") || "en", claudeLingerMin: 5, claudeScreenOffMin: 2, claudeCool: true };
+  let claudeOn = !!new URLSearchParams(location.search).get("claude");
   const apps = [
     { key: "chrome", name: "Google Chrome", state: "fg", ramMB: 1840, cpu: 4.2, rule: "auto" },
     { key: "premiere", name: "Adobe Premiere Pro", state: "work", ramMB: 3170, cpu: 38, rule: "free", reason: "rule-free" },
@@ -53,8 +54,16 @@
       cpu: 14 + Math.random() * 6,
       stats: { reclaimedTodayMB: 6340 },
       history, trims, log,
-      apps: apps.map((a) => paused && !["fg", "guard"].includes(a.state) ? Object.assign({}, a, { state: "off" }) : a),
+      claude: claudeOn ? { since: T0, busy: true, quietSec: 0, cpu: 3.4, ramMB: 4210, asleep: 7, using_: 1, freedMB: 3870, present: false, plan: true } : null,
+      apps: apps.map((a) => paused && !["fg", "guard"].includes(a.state) ? Object.assign({}, a, { state: "off" })
+        : claudeOn ? claudeView(a) : a),
     };
+  }
+  function claudeView(a) {
+    if (a.key === "claude") return Object.assign({}, a, { state: "claude", reason: "claude-self", ramMB: 3420, cpu: 3.4 });
+    if (a.key === "chrome") return Object.assign({}, a, { state: "claude", reason: "claude-uses", lingerSec: 214, claudeApp: true });
+    if (a.rule === "free" || ["guard", "locked"].includes(a.state)) return a;
+    return Object.assign({}, a, { state: "sleep", reason: "claude-away", cpu: 0, ramMB: Math.round(a.ramMB * 0.15), trimmedMB: Math.round(a.ramMB * 0.85) });
   }
   function emit(msg) { const e = { data: JSON.stringify(msg) }; listeners.forEach((f) => f(e)); }
   function pushLog(kind, code, app = "", num = 0, extra = "") { log.unshift({ id: ++logId, t: now(), kind, code, app, num, extra }); }
@@ -77,6 +86,7 @@
       const m = JSON.parse(raw);
       if (m.type === "setMode") { mode = m.mode; pushLog("info", "mode", "", 0, m.mode); }
       if (m.type === "pause") { paused = true; pausedUntil = m.minutes ? now() + m.minutes * 60000 : null; pushLog("info", "paused", "", m.minutes); }
+      if (m.type === "claude") { claudeOn = m.on; pushLog(m.on ? "claude" : "info", m.on ? "claudeOn" : "claudeOff"); }
       if (m.type === "resume") { paused = false; pausedUntil = null; pushLog("info", "resumed"); }
       if (m.type === "setSetting") {
         if (m.key === "langArabic") settings.lang = m.value ? "ar" : "en";

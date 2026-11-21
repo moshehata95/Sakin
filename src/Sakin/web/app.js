@@ -6,8 +6,8 @@
   const bridge = window.chrome && window.chrome.webview ? window.chrome.webview : window.SakinMock;
   const send = (type, data) => bridge.postMessage(JSON.stringify(Object.assign({ type }, data || {})));
 
-  const ORDER = { boost: -1, fg: 0, work: 1, wait: 2, calm: 3, sleep: 4, locked: 5, guard: 6, off: 7 };
-  const CLS = { boost: "st-boost", fg: "st-fg", work: "st-work", wait: "st-wait", calm: "st-calm", sleep: "st-sleep", guard: "st-guard", locked: "st-locked", off: "st-wait" };
+  const ORDER = { boost: -1, fg: 0, claude: 0.5, work: 1, wait: 2, calm: 3, sleep: 4, locked: 5, guard: 6, off: 7 };
+  const CLS = { boost: "st-boost", fg: "st-fg", claude: "st-claude", work: "st-work", wait: "st-wait", calm: "st-calm", sleep: "st-sleep", guard: "st-guard", locked: "st-locked", off: "st-wait" };
   const SEGS = ["fg", "work", "calm", "sleep", "other"];
 
   let S = null;
@@ -23,6 +23,8 @@
   const clock = (t) => new Date(t).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
   const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   const rtl = () => lang === "ar";
+  // English names inside Arabic text ("Claude", "Claude mode") are isolated so they don't flip the sentence around them
+  const iso = (s) => rtl() && typeof s === "string" ? s.replace(/Claude( mode)?/g, (m) => "\u2068" + m + "\u2069") : s;
 
   // ---------- language ----------
   function applyLang(next) {
@@ -34,7 +36,7 @@
     document.title = L.brand;
     for (const el of document.querySelectorAll("[data-t]")) {
       const v = L[el.dataset.t];
-      if (typeof v === "string") el.textContent = v;
+      if (typeof v === "string") el.textContent = iso(v);
     }
     for (const el of document.querySelectorAll("[data-t-aria]")) el.setAttribute("aria-label", L[el.dataset.tAria]);
     $(".about").textContent = L.about;
@@ -119,10 +121,11 @@
     switch (a.state) {
       case "boost": return w.boost(a.pinnedMB);
       case "fg": return w.fg;
+      case "claude": return a.reason === "claude-uses" ? w["claude-uses"](L.ago(a.lingerSec)) : (w[a.reason] || "");
       case "work": return typeof w[a.reason] === "function" ? w[a.reason](a.reasonPct) : (w[a.reason] || "");
       case "wait": return w.wait(a.waitSec);
       case "calm": return w.calm(L.ago(a.idleSec));
-      case "sleep": return w.sleep(L.ago(a.idleSec), a.trimmedMB ? L.size(a.trimmedMB) : "");
+      case "sleep": return a.reason === "claude-away" ? w["claude-away"](a.trimmedMB ? L.size(a.trimmedMB) : "") : w.sleep(L.ago(a.idleSec), a.trimmedMB ? L.size(a.trimmedMB) : "");
       case "guard": return w[a.reason] || w.system;
       case "locked": return w.locked;
       case "off": return w.off;
@@ -133,7 +136,7 @@
   function renderApps() {
     let list = S.apps.slice();
     if (filter === "calm") list = list.filter((a) => a.state === "calm" || a.state === "sleep");
-    else if (filter === "working") list = list.filter((a) => a.state === "work" || a.state === "fg");
+    else if (filter === "working") list = list.filter((a) => a.state === "work" || a.state === "fg" || a.state === "claude");
     else if (filter === "rules") list = list.filter((a) => a.rule && a.rule !== "auto");
     list.sort((a, b) => (ORDER[a.state] - ORDER[b.state]) || (b.ramMB - a.ramMB));
 
@@ -150,7 +153,7 @@
       const tag = a.rule && L.rule[a.rule] ? `<span class="rule-tag">${L.rule[a.rule]}</span>` : "";
       const html =
         `<div class="who">${icon}<span class="nm" dir="auto" title="${esc(a.name)}">${esc(a.name)}</span>${tag}</div>` +
-        `<div class="state ${CLS[a.state] || "st-wait"}"><span class="pip"></span><span class="lbl">${L.state[a.state] || ""}</span><span class="why">${esc(why(a))}</span></div>` +
+        `<div class="state ${CLS[a.state] || "st-wait"}"><span class="pip"></span><span class="lbl">${iso(L.state[a.state] || "")}</span><span class="why">${esc(iso(why(a)))}</span></div>` +
         `<div class="ram">${sizeHtml(a.ramMB)}</div>` +
         `<div class="cpu${a.cpu < 0.5 ? " zero" : ""}">${a.cpu < 0.5 ? "0" : a.cpu.toFixed(a.cpu < 10 ? 1 : 0)}<small>%</small></div>` +
         `<button class="more" aria-haspopup="menu" aria-expanded="${menuKey === a.key}" aria-label="${esc(a.name)}"><svg viewBox="0 0 16 16"><path d="M3.5 8h.01M8 8h.01M12.5 8h.01"/></svg></button>`;
@@ -177,7 +180,7 @@
     if (newest === lastLogId) return;
     ol.innerHTML = S.log.slice(0, 40).map((e) => {
       const f = L.log[e.code];
-      const text = f ? f(e) : esc(e.code);
+      const text = iso(f ? f(e) : esc(e.code));
       return `<li class="k-${e.kind}${lastLogId > 0 && e.id > lastLogId ? " new" : ""}">${text}<time>${clock(e.t)}</time></li>`;
     }).join("");
     lastLogId = newest;
@@ -206,6 +209,20 @@
     const band = $("#boostBand");
     band.hidden = !S.boost;
     if (S.boost) $("#boostText").innerHTML = L.boostBand(esc(S.boost.name || ""), S.boost.firstPassDone ? S.boost.freedMB : 0);
+
+    const c = S.claude;
+    $("#claudeBtn").classList.toggle("on", !!c);
+    $("#claudeBtn").setAttribute("aria-pressed", String(!!c));
+    $("#claudeBand").hidden = !c;
+    if (c) {
+      $("#claudePip").classList.toggle("quiet", !c.busy);
+      $("#claudeTitle").innerHTML = iso(c.busy ? L.claudeBusy : L.claudeQuiet(L.ago(c.quietSec)));
+      $("#claudeSub").textContent = iso(c.present ? L.claudePresent : L.claudeAway(S.settings.claudeScreenOffMin));
+      $("#cbUsing").innerHTML = `${c.using_}<small> · ${L.size(c.ramMB)}</small>`;
+      $("#cbAsleep").textContent = c.asleep;
+      $("#cbFreed").innerHTML = sizeHtml(c.freedMB);
+      if (!c.plan) $("#claudeSub").textContent = iso(L.claudeNoPlan);
+    }
   }
 
   function render() {
@@ -239,6 +256,9 @@
   });
   $("#resumeBtn").addEventListener("click", () => send("resume"));
   $("#boostStop").addEventListener("click", () => send("unboost"));
+  $("#claudeBtn").addEventListener("click", () => send("claude", { on: !(S && S.claude) }));
+  $("#claudeStop").addEventListener("click", () => send("claude", { on: false }));
+  $("#screenOffBtn").addEventListener("click", () => send("screenOff"));
 
   $("#tabs").addEventListener("click", (e) => {
     const b = e.target.closest("button[data-f]");
@@ -268,6 +288,9 @@
     bi.classList.toggle("on", !!a && a.state === "boost");
     $("#boostItemLabel").textContent = a && a.state === "boost" ? L.stopBoostThis : L.boostThis;
     bi.querySelector("small").hidden = !!a && a.state === "boost";
+    const ci = rowMenu.querySelector('[data-act="claudeApp"]');
+    ci.hidden = !a || a.state === "guard" || key === "claude";
+    ci.setAttribute("aria-checked", String(!!a && !!a.claudeApp));
     rowMenu.hidden = false;
     const r = b.getBoundingClientRect();
     const mh = rowMenu.offsetHeight, mw = rowMenu.offsetWidth;
@@ -281,6 +304,10 @@
     if (b.dataset.rule) send("setRule", { key: menuKey, rule: b.dataset.rule });
     if (b.dataset.act === "trim") send("trimNow", { key: menuKey });
     if (b.dataset.act === "boost") send("boost", { key: menuKey });
+    if (b.dataset.act === "claudeApp") {
+      const a = S.apps.find((x) => x.key === menuKey);
+      send("claudeApp", { key: menuKey, on: !(a && a.claudeApp) });
+    }
     closeMenus();
   });
 
@@ -316,7 +343,7 @@
   function toast(msg) {
     const t = $("#toast");
     const f = L.toast[msg.code];
-    t.textContent = f ? f(msg) : "";
+    t.textContent = iso(f ? f(msg) : "");
     t.hidden = false;
     clearTimeout(toastT);
     toastT = setTimeout(() => (t.hidden = true), 2600);

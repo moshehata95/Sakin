@@ -209,6 +209,28 @@ internal static class Native
     [DllImport("user32.dll")]
     public static extern bool UnregisterHotKey(IntPtr hwnd, int id);
 
+    // ---------------- Claude mode ----------------
+    public const uint ES_CONTINUOUS = 0x80000000, ES_SYSTEM_REQUIRED = 0x1;
+    [DllImport("kernel32.dll")]
+    public static extern uint SetThreadExecutionState(uint flags);
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct LASTINPUTINFO { public uint cbSize; public uint dwTime; }
+    [DllImport("user32.dll")]
+    static extern bool GetLastInputInfo(ref LASTINPUTINFO info);
+    /// <summary>Milliseconds since the last keyboard or mouse input.</summary>
+    public static long IdleInputMs()
+    {
+        var li = new LASTINPUTINFO { cbSize = 8 };
+        if (!GetLastInputInfo(ref li)) return 0;
+        return (uint)Environment.TickCount - li.dwTime;
+    }
+
+    [DllImport("user32.dll")]
+    static extern bool PostMessage(IntPtr hwnd, int msg, IntPtr w, IntPtr l);
+    /// <summary>Turns the display off now (any input turns it back on).</summary>
+    public static void ScreenOff() => PostMessage((IntPtr)0xFFFF, 0x0112 /*WM_SYSCOMMAND*/, (IntPtr)0xF170 /*SC_MONITORPOWER*/, (IntPtr)2);
+
     // ---------------- misc ----------------
     [DllImport("user32.dll")]
     public static extern bool DestroyIcon(IntPtr h);

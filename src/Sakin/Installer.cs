@@ -119,6 +119,8 @@ internal static class Installer
         quitSignal.Set();
         foreach (var p in Process.GetProcessesByName("Sakin").Where(p => p.Id != Environment.ProcessId))
             try { if (!p.WaitForExit(10_000)) p.Kill(); } catch { }
+        // if it couldn't put the power plan back itself (crash, killed), do it here
+        PowerPlan.Leave(Settings.Load());
 
         // 2. startup, shortcut, Installed-apps entry
         Startup.SetRunKey(false);

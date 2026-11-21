@@ -9,6 +9,16 @@ internal static class Program
         bool tray = args.Contains("--tray");
         using var quitSignal = new EventWaitHandle(false, EventResetMode.ManualReset, @"Local\Sakin.Quit");
         if (args.Contains("--quit")) { quitSignal.Set(); return 0; }   // clean exit of the running copy
+        using var claudeOnSignal = new EventWaitHandle(false, EventResetMode.AutoReset, @"Local\Sakin.ClaudeOn");
+        using var claudeOffSignal = new EventWaitHandle(false, EventResetMode.AutoReset, @"Local\Sakin.ClaudeOff");
+        // Sakin.exe --claude-mode on|off: lets a script (or Claude itself) switch Claude mode on the running copy
+        int cm = Array.IndexOf(args, "--claude-mode");
+        if (cm >= 0)
+        {
+            bool on = cm + 1 >= args.Length || args[cm + 1] != "off";
+            (on ? claudeOnSignal : claudeOffSignal).Set();
+            return 0;
+        }
         if (args.Contains("--uninstall")) { ApplicationConfiguration.Initialize(); return Installer.Uninstall(args.Contains("--quiet"), quitSignal); }
         // run from anywhere else: install (or update) per-user and hand over to the installed copy
         if (!args.Contains("--portable") && !Installer.IsInstalledCopy && Installer.InstallAndRelaunch(args, quitSignal)) return 0;
@@ -56,8 +66,10 @@ internal static class Program
         {
             while (true)
             {
-                int which = WaitHandle.WaitAny(new WaitHandle[] { showSignal, quitSignal });
+                int which = WaitHandle.WaitAny(new WaitHandle[] { showSignal, quitSignal, claudeOnSignal, claudeOffSignal });
                 if (which == 0) app.ShowFromAnyThread();
+                else if (which == 2) engine.Post(() => engine.SetClaudeMode(true));
+                else if (which == 3) engine.Post(() => engine.SetClaudeMode(false));
                 else { app.ExitFromAnyThread(); return; }
             }
         }) { IsBackground = true, Name = "sakin-show" };

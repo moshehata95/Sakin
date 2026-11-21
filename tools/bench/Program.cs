@@ -44,6 +44,41 @@ static class P
                     new Thread(() => { double x = 1; while (true) { x = Math.Sqrt(x + 1.0000001); } }) { IsBackground = true }.Start();
                 break;
             }
+            case "serve":
+            {
+                // SakinBench serve <port> <name>: holds 300 MB and listens on 127.0.0.1:<port>.
+                // Every byte received makes it work one CPU thread for ~1.5 s, then it answers "ok".
+                // Stands in for an app Claude drives (a local MCP bridge, a scripting port).
+                int port = int.Parse(a[1]);
+                var blocks = new List<byte[]>();
+                for (int i = 0; i < 300; i++) { var b = new byte[1 << 20]; for (int j = 0; j < b.Length; j += 4096) b[j] = 1; blocks.Add(b); }
+                lbl.Text = $"{a[2]}: listening on {port}";
+                var listener = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, port);
+                listener.Start();
+                new Thread(() =>
+                {
+                    while (true)
+                    {
+                        var c = listener.AcceptTcpClient();
+                        new Thread(() =>
+                        {
+                            try
+                            {
+                                var s = c.GetStream(); var buf = new byte[1];
+                                while (s.Read(buf, 0, 1) == 1)
+                                {
+                                    var sw = Stopwatch.StartNew(); double x = 1;
+                                    while (sw.ElapsedMilliseconds < 1500) x = Math.Sqrt(x + 1.0000001);
+                                    s.Write("ok\n"u8);
+                                }
+                            }
+                            catch { }
+                            c.Dispose();
+                        }) { IsBackground = true }.Start();
+                    }
+                }) { IsBackground = true }.Start();
+                break;
+            }
             case "fg":
             {
                 string log = a[2];

@@ -116,6 +116,39 @@ its data in 55 ms. Without Boost, Windows paged it out to 10 MB and the same re-
 Boost helps when an app is slow because RAM is full. If it's slow because the file is heavy on the CPU or GPU,
 the higher priority helps a little, but no tool can add CPU power.
 
+## Claude mode: leave the PC running for Claude
+
+For when you leave the laptop on for hours or days because [Claude Code](https://claude.com/claude-code) is working
+on it. Turn it on with the **Claude mode** button at the top of the window or from the tray menu, then walk away.
+
+What runs:
+
+- **Claude itself and everything it starts** (its sessions, MCP servers, builds, `git`, `ffmpeg`, a headless browser)
+  runs normally. Sakin follows the process tree from every `claude.exe`, so nothing needs to be listed.
+- **Apps Claude is using.** An app wakes up the moment Claude has a live local connection to it (an MCP bridge
+  inside Premiere, a local server, a debugging port), or when an app on the *Claude uses this app* list starts
+  working (Illustrator or Photoshop driven by script, Chrome through Claude's extension). It stays awake for
+  5 minutes after Claude stops using it, then goes back to sleep. Add or remove apps from the list in each app's **⋯** menu.
+- **Everything else sleeps at once**: lowest CPU priority, Efficiency mode, low memory priority, and its RAM handed
+  back. That includes the window in front when nobody has touched the keyboard or mouse for 2 minutes. Come back
+  and the window you use works as always.
+
+What changes on the PC (all put back when you turn Claude mode off, quit Sakin, or uninstall it):
+
+- A power plan of its own: **the PC never sleeps, closing the lid does nothing**, the screen turns off after
+  2 minutes, and with *Keep the CPU cool* on (the default) the CPU runs without turbo. Over days that means far
+  less heat and fan noise; a long build takes a little longer. Your own plan comes back exactly.
+- **Screen off** in the band turns the display off right away.
+
+Sakin can't stop Windows Update from restarting the PC. Pause updates before leaving the PC running for days.
+
+Scripts, and Claude itself, can switch it on the running copy:
+
+```
+Sakin.exe --claude-mode on
+Sakin.exe --claude-mode off
+```
+
 ## Per-app rules
 
 Open the **⋯** menu on any app:
@@ -141,6 +174,7 @@ Open the **⋯** menu on any app:
 Sakin.exe                     open the window (or bring up the running copy)
 Sakin.exe --tray              start in the tray only (used at sign-in)
 Sakin.exe --quit              quit the running copy and restore every app
+Sakin.exe --claude-mode on    switch Claude mode on (or off) in the running copy
 Sakin.exe --portable          run without installing
 Sakin.exe --uninstall         remove Sakin (add --quiet to skip the prompts)
 Sakin.exe --selftest out.txt  check every probe and a calm/restore round trip
@@ -169,6 +203,8 @@ src/Sakin/
   TrayApp.cs      tray icon, menu, foreground hook
   MainWindow.cs   WebView2 host and the message bridge
   Startup.cs      start with Windows (Run key, or an elevated scheduled task)
+  PowerPlan.cs    Claude mode's power plan, and putting yours back
+  TcpProbe.cs     local connections between Claude and the apps it uses
   Installer.cs    per-user install, update and uninstall
   Settings.cs     settings and presets
   SelfTest.cs     --selftest
@@ -178,6 +214,7 @@ tools/
   cpu-test.ps1    foreground speed under background load
   test-switch.ps1 calm-then-switch-back latency
   boost-test.ps1  Boost A/B under a memory flood
+  claude-test.ps1 Claude mode end to end: sleep, wake on use, linger, power plan
   bench/          the test apps used by the benchmarks
 docs/
   ARCHITECTURE.md

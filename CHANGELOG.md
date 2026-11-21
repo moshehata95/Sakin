@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+## 1.3.0 — 2026-11-21
+
+- **Claude mode**, for leaving the PC running while Claude Code works. Claude and everything it starts run normally;
+  an app Claude is using wakes up (a live local connection from Claude, or activity in an app on the
+  *Claude uses this app* list) and stays awake for 5 minutes after; everything else sleeps at once and hands its RAM
+  back, including the window in front when nobody is at the keyboard.
+- Claude mode switches to a power plan of its own: never sleeps, ignores the lid, turns the screen off after
+  2 minutes, and runs the CPU without turbo (*Keep the CPU cool*). Your plan is put back when Claude mode ends,
+  when Sakin quits, after a crash, and on uninstall.
+- `Sakin.exe --claude-mode on|off` switches it on the running copy, so a script or Claude itself can turn it on.
+- Each app's ⋯ menu has *Claude uses this app*; Chrome, the Adobe apps and Office are on the list by default.
+
 ## 1.2.0 — 2026-11-21
 
 - **Boost**: give one app the machine. Ctrl+Alt+B (works even when the app has stopped responding), the tray menu,

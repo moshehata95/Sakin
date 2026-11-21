@@ -20,6 +20,15 @@ internal sealed class Settings
     public bool TrayHintShown { get; set; } = false;
     public Dictionary<string, string> Rules { get; set; } = new();   // app key → free | calm | never
 
+    // ---- Claude mode: the PC left running for Claude Code ----
+    public bool ClaudeMode { get; set; } = false;
+    public int ClaudeLingerMin { get; set; } = 5;       // an app Claude used stays awake this long after
+    public int ClaudeScreenOffMin { get; set; } = 2;
+    public bool ClaudeCool { get; set; } = true;        // CPU without turbo: cooler and quieter for days
+    public List<string> ClaudeApps { get; set; } = new() { "chrome", "illustrator", "photoshop", "adobe premiere pro", "afterfx", "powerpnt", "winword", "excel" };
+    public string ClaudeScheme { get; set; } = "";      // our power plan while Claude mode is on
+    public string ClaudePrevScheme { get; set; } = "";  // the plan to go back to
+
     public string StatsDay { get; set; } = "";
     public double ReclaimedTodayMB { get; set; }
 
@@ -46,6 +55,9 @@ internal sealed class Settings
         BusyCpuPct = Math.Clamp(BusyCpuPct, 1, 50);
         BusyGpuPct = Math.Clamp(BusyGpuPct, 5, 90);
         Level = Math.Clamp(Level, 0, 2);
+        ClaudeLingerMin = Math.Clamp(ClaudeLingerMin, 1, 60);
+        ClaudeScreenOffMin = Math.Clamp(ClaudeScreenOffMin, 1, 60);
+        ClaudeApps ??= new();
     }
 
     // ---------------- persistence ----------------

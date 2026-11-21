@@ -160,6 +160,9 @@ internal sealed class MainWindow : Form
             case "trimNow": { string k = Str("key"); _engine.Post(() => _engine.TrimNow(k)); break; }
             case "boost": { string k = Str("key"); _engine.Post(() => _engine.ToggleBoost(k)); break; }
             case "unboost": _engine.Post(() => _engine.StopBoost("user")); break;
+            case "claude": { bool on = m.TryGetProperty("on", out var v) && v.ValueKind == JsonValueKind.True; _engine.Post(() => _engine.SetClaudeMode(on)); break; }
+            case "claudeApp": { string k = Str("key"); bool on = m.TryGetProperty("on", out var v) && v.ValueKind == JsonValueKind.True; _engine.Post(() => _engine.SetClaudeApp(k, on)); break; }
+            case "screenOff": Task.Delay(700).ContinueWith(_ => Native.ScreenOff()); break;
             case "setSetting":
             {
                 string key = Str("key");
