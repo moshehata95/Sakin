@@ -115,8 +115,6 @@ internal sealed class TrayApp : ApplicationContext
             T("Leave the PC running for Claude: only Claude and the apps it uses stay awake.", "سيب الجهاز شغال لـ Claude: هو والبرامج اللي بيستخدمها بس اللي صاحيين.") };
         claude.Click += (_, _) => _engine.Post(() => _engine.SetClaudeMode(!claudeOn));
         menu.Items.Add(claude);
-        if (claudeOn)
-            menu.Items.Add(new ToolStripMenuItem(T("Turn the screen off", "اطفي الشاشة"), null, (_, _) => Task.Delay(700).ContinueWith(_ => Native.ScreenOff())));
         menu.Items.Add(new ToolStripSeparator());
 
         var modes = new ToolStripMenuItem(T("Intensity", "الشدة"));

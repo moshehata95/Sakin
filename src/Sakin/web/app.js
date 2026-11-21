@@ -258,7 +258,6 @@
   $("#boostStop").addEventListener("click", () => send("unboost"));
   $("#claudeBtn").addEventListener("click", () => send("claude", { on: !(S && S.claude) }));
   $("#claudeStop").addEventListener("click", () => send("claude", { on: false }));
-  $("#screenOffBtn").addEventListener("click", () => send("screenOff"));
   $("#donateBtn").addEventListener("click", () => send("donate"));
 
   $("#tabs").addEventListener("click", (e) => {

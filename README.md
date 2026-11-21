@@ -140,7 +140,7 @@ What changes on the PC (all put back when you turn Claude mode off, quit Sakin, 
   2 minutes, and with *Keep the CPU cool* on (the default) the CPU runs without turbo. Over days that means far
   less heat and fan noise; a long build takes a little longer. Your own plan comes back exactly.
 - **Do not disturb** turns on, so notification sounds don't go off all night. If you already had it on, nothing changes; if you change it yourself meanwhile, your choice is kept. (Apps that draw their own popups, such as Telegram Desktop by default, don't go through Windows and aren't silenced.)
-- **Screen off** in the band turns the display off right away.
+- To turn a screen off yourself without stopping anything, close the lid (it does nothing in Claude mode) or switch the external monitor off with its own button. Some apps (a video in a browser tab, for example) ask Windows to keep the screen on, and then the timeout doesn't apply.
 
 Sakin can't stop Windows Update from restarting the PC. Pause updates before leaving the PC running for days.
 

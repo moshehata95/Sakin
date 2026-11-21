@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 1.3.3 — 2026-11-22
+
+- **Fix:** removed Claude mode's *Screen off* button and tray item. On Modern Standby laptops turning the display off
+  that way puts the PC into standby, which suspends Claude and cuts its sessions. The screen now only turns off on
+  the plan's timeout, which doesn't sleep the PC. To turn a screen off yourself, close the lid or switch the
+  monitor off.
+
 ## 1.3.2 — 2026-11-22
 
 - Claude mode turns on Windows' **Do not disturb** (on by default, a switch in Settings) and puts back what you had

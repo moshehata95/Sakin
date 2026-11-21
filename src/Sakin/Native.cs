@@ -226,10 +226,8 @@ internal static class Native
         return (uint)Environment.TickCount - li.dwTime;
     }
 
-    [DllImport("user32.dll")]
-    static extern bool PostMessage(IntPtr hwnd, int msg, IntPtr w, IntPtr l);
-    /// <summary>Turns the display off now (any input turns it back on).</summary>
-    public static void ScreenOff() => PostMessage((IntPtr)0xFFFF, 0x0112 /*WM_SYSCOMMAND*/, (IntPtr)0xF170 /*SC_MONITORPOWER*/, (IntPtr)2);
+    // Never turn the display off with SC_MONITORPOWER: on Modern Standby laptops Windows treats it like the
+    // power button and puts the PC into standby, which suspends Claude. Only the plan's screen timeout is used.
 
     // ---------------- misc ----------------
     [DllImport("user32.dll")]

@@ -110,6 +110,11 @@ the settings before switching. Turning Claude mode off, quitting, the next start
 switch back to that plan and delete the copy. `powercfg` does all of this without administrator rights. The engine
 thread also holds `ES_SYSTEM_REQUIRED`.
 
+Sakin never turns the display off itself. `SendMessage(HWND_BROADCAST, WM_SYSCOMMAND, SC_MONITORPOWER, 2)` looks
+harmless, but on Modern Standby laptops (S0 low power idle) Windows treats it like the power button and enters
+standby, which suspends desktop apps, Claude included, whatever power requests are held. Version 1.3.0 to 1.3.2 had
+a *Screen off* button that did exactly that; it was removed in 1.3.3.
+
 **Do not disturb.** `QuietHours` uses the same object as the Settings app (`QuietHoursSettings`,
 `IQuietHoursSettings::put_UserSelectedProfile`) on a short-lived STA thread. Entering sets
 `Microsoft.QuietHoursProfile.PriorityOnly` unless the user already has PriorityOnly or AlarmsOnly; the previous
@@ -129,7 +134,7 @@ one is still the one Sakin set, so a change the user made meanwhile is kept. (Wr
 The interface is static HTML/CSS/JS embedded in the exe and served to WebView2 from `https://sakin.app/`
 (intercepted, never on the network). The engine sends a full snapshot about once a second
 (`type: "state"`), app icons once (`type: "icons"`), and toasts. The page sends commands back:
-`setMode`, `pause`, `resume`, `setRule`, `trimNow`, `boost`, `unboost`, `claude`, `claudeApp`, `screenOff` and `setSetting`. All words live in `web/i18n.js`. The engine
+`setMode`, `pause`, `resume`, `setRule`, `trimNow`, `boost`, `unboost`, `claude`, `claudeApp` and `setSetting`. All words live in `web/i18n.js`. The engine
 only sends codes and numbers, so English and Arabic come from the same data.
 
 The WebView2 control is created when the window opens and disposed when it closes, which takes Sakin back to
