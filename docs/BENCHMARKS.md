@@ -61,6 +61,24 @@ after 36 s in background:  priority=BelowNormal  efficiency=on   memPriority=2
 switched back:             restored in 32 ms     priority=Normal efficiency=off memPriority=5
 ```
 
+## Boost: `tools/boost-test.ps1`
+
+A target app (standing in for Illustrator) holds 700 MB; two other apps hold 700 MB each in the background. With the
+target in front, phase B presses Ctrl+Alt+B; phase A doesn't. Then the target goes to the background and a memory hog
+allocates free RAM + 1.5 GB to force Windows to page things out. After 20 s the target is brought back and re-reads
+all of its data.
+
+| | A, no Boost | B, Boost |
+|---|---|---|
+| Free RAM before → after pressing Boost | 1,871 → 1,889 MB | 1,864 → **4,080 MB** |
+| Other apps' memory after pressing Boost | 1,506 MB | **0 MB** (handed back) |
+| Target priority / throttling | Normal / Windows decides | **AboveNormal / never throttled** |
+| Target working set pinned | no | **712 MB** |
+| Memory flood | 3,427 MB | 5,189 MB (bigger, because more RAM was free) |
+| Target's RAM during the flood | **10 MB** (paged out) | **756 MB** (held) |
+| Re-reading all its data afterwards | 372 ms | **55 ms** |
+| After stopping Boost | n/a | Normal priority, pin removed |
+
 ## Self-test: `Sakin.exe --selftest out.txt`
 
 Checks the process table against `Process.GetProcesses()` (names, session, create time, CPU time, parent), runs

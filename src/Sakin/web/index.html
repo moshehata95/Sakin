@@ -45,6 +45,12 @@
     <button class="link" id="resumeBtn" data-t="resume">Resume</button>
   </div>
 
+  <div class="boost-band" id="boostBand" hidden>
+    <span class="boost-pip" aria-hidden="true"></span>
+    <span id="boostText"></span>
+    <button class="btn-line" id="boostStop" data-t="boostStop">Stop boost</button>
+  </div>
+
   <section class="gauge">
     <div class="gauge-head">
       <div class="free">
@@ -151,6 +157,8 @@
 
   <div class="menu row-menu" id="rowMenu" role="menu" hidden>
     <span class="menu-title" id="rowMenuTitle"></span>
+    <button role="menuitem" data-act="boost" class="boost-item"><span id="boostItemLabel" data-t="boostThis">Boost this app</span><small data-t="boostThisD">Everything else steps aside</small></button>
+    <hr>
     <button role="menuitemradio" data-rule="auto"><span data-t="rAuto">Automatic</span><small data-t="rAutoD">Sakin decides</small></button>
     <button role="menuitemradio" data-rule="free"><span data-t="rFree">Always full speed</span><small data-t="rFreeD">Like render apps</small></button>
     <button role="menuitemradio" data-rule="calm"><span data-t="rCalm">Always calm it</span><small data-t="rCalmD">Even when it's using CPU</small></button>

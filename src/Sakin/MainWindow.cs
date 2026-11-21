@@ -158,6 +158,8 @@ internal sealed class MainWindow : Form
             case "resume": _engine.Post(_engine.Resume); break;
             case "setRule": { string k = Str("key"), r = Str("rule"); _engine.Post(() => _engine.SetRule(k, r)); break; }
             case "trimNow": { string k = Str("key"); _engine.Post(() => _engine.TrimNow(k)); break; }
+            case "boost": { string k = Str("key"); _engine.Post(() => _engine.ToggleBoost(k)); break; }
+            case "unboost": _engine.Post(() => _engine.StopBoost("user")); break;
             case "setSetting":
             {
                 string key = Str("key");

@@ -12,6 +12,7 @@ internal sealed class TrayApp : ApplicationContext
     readonly IntPtr _hook;
     readonly Control _ui;                         // marshals engine events onto this thread
     MainWindow? _window;
+    readonly HotkeyWindow _hotkey;
     bool? _lastPaused;
     bool _exiting;
 
@@ -28,10 +29,16 @@ internal sealed class TrayApp : ApplicationContext
 
         _tray = new NotifyIcon { Visible = true, Text = "Sakin" };
         _tray.MouseClick += (_, e) => { if (e.Button == MouseButtons.Left) ShowWindow(); };
+        // Ctrl+Alt+B boosts whatever app you were just using, even when it has stopped responding
+        _hotkey = new HotkeyWindow(() => _engine.Post(() => _engine.ToggleBoost(null)));
         RefreshTray();
         BuildMenu();
 
         _engine.ModeChanged += () => _ui.BeginInvoke(() => { BuildMenu(); RefreshTray(); });
+        _engine.BoostChanged += (name, on) => _ui.BeginInvoke(() =>
+            _tray.ShowBalloonTip(2500, "Sakin", on
+                ? T($"Boosting {name}. Everything else is calmed and its RAM freed.", $"بوست لـ {name}. كل الباقي اتهدّى ورامه اتفضّت.")
+                : T($"Boost for {name} is off.", $"البوست لـ {name} وقف."), ToolTipIcon.None));
 
         _hookProc = (_, _, _, _, _, _, _) => _engine.ForegroundChanged();
         _hook = Native.SetWinEventHook(Native.EVENT_SYSTEM_FOREGROUND, Native.EVENT_SYSTEM_FOREGROUND, IntPtr.Zero,
@@ -57,8 +64,10 @@ internal sealed class TrayApp : ApplicationContext
             old?.Dispose();
         }
         var (calm, sleep, avail, _) = _engine.Summary();
+        string? b = _engine.BoostName;
         string text = _engine.Paused
             ? T("Sakin · paused", "ساكن · واقف")
+            : b != null ? T($"Sakin · boosting {b}", $"ساكن · بوست لـ {b}")
             : T($"Sakin · {avail / 1024:0.0} GB free · {calm + sleep} calmed",
                 $"ساكن · {avail / 1024:0.0} جيجا فاضية · {calm + sleep} هادية");
         _tray.Text = text.Length > 63 ? text[..63] : text;
@@ -79,6 +88,21 @@ internal sealed class TrayApp : ApplicationContext
 
         var open = new ToolStripMenuItem(T("Open Sakin", "افتح ساكن"), null, (_, _) => ShowWindow()) { Font = new Font("Segoe UI Semibold", 9.5f) };
         menu.Items.Add(open);
+        menu.Items.Add(new ToolStripSeparator());
+
+        var boost = new ToolStripMenuItem { ShortcutKeyDisplayString = _hotkey.Registered ? "Ctrl+Alt+B" : "" };
+        void SetBoostText()
+        {
+            string? on = _engine.BoostName;
+            string last = _engine.LastAppName;
+            boost.Text = on != null ? T($"Stop boosting {on}", $"وقّف البوست لـ {on}")
+                : last != "" ? T($"Boost {last}", $"بوست لـ {last}") : T("Boost the app you're using", "بوست للبرنامج اللي شغال عليه");
+            boost.Enabled = on != null || last != "";
+        }
+        SetBoostText();
+        boost.Click += (_, _) => _engine.Post(() => _engine.ToggleBoost(null));
+        menu.Opening += (_, _) => SetBoostText();
+        menu.Items.Add(boost);
         menu.Items.Add(new ToolStripSeparator());
 
         var modes = new ToolStripMenuItem(T("Intensity", "الشدة"));
@@ -105,6 +129,28 @@ internal sealed class TrayApp : ApplicationContext
         foreach (ToolStripItem it in menu.Items) if (it is ToolStripMenuItem mi) mi.DropDown.RightToLeft = menu.RightToLeft;
         _tray.ContextMenuStrip = menu;
         old?.Dispose();
+    }
+
+    /// <summary>A message-only window that receives the global hotkey.</summary>
+    sealed class HotkeyWindow : NativeWindow, IDisposable
+    {
+        readonly Action _onHotkey;
+        public bool Registered { get; }
+        public HotkeyWindow(Action onHotkey)
+        {
+            _onHotkey = onHotkey;
+            CreateHandle(new CreateParams { Parent = (IntPtr)(-3) /* HWND_MESSAGE */ });
+            Registered = Native.RegisterHotKey(Handle, 1, Native.MOD_CONTROL | Native.MOD_ALT | Native.MOD_NOREPEAT, (uint)Keys.B);
+        }
+        protected override void WndProc(ref Message m)
+        {
+            if (m.Msg == Native.WM_HOTKEY && (int)m.WParam == 1) _onHotkey();
+            base.WndProc(ref m);
+        }
+        public void Dispose()
+        {
+            if (Handle != IntPtr.Zero) { Native.UnregisterHotKey(Handle, 1); DestroyHandle(); }
+        }
     }
 
     sealed class MenuColors : ProfessionalColorTable
@@ -193,6 +239,7 @@ internal sealed class TrayApp : ApplicationContext
         _exiting = true;
         _timer.Stop();
         if (_hook != IntPtr.Zero) Native.UnhookWinEvent(_hook);
+        _hotkey.Dispose();
         _window?.Close();
         _engine.Dispose();      // restores every process it changed
         _tray.Visible = false;

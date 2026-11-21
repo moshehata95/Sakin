@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+## 1.2.0 — 2026-11-21
+
+- **Boost**: give one app the machine. Ctrl+Alt+B (works even when the app has stopped responding), the tray menu,
+  or the app's ⋯ menu. Every other background app is calmed and its RAM handed back; the boosted app's memory is
+  held in RAM with a hard minimum working set (capped at half of RAM), and it runs above normal priority, never
+  throttled, even in the background. Stops on the same shortcut, the Stop button, or when the app closes, and
+  restores everything exactly.
+- Measured under a 5 GB memory flood: the boosted app kept 756 MB resident (10 MB without Boost) and re-read its
+  data in 55 ms (372 ms without).
+
 ## 1.1.0 — 2026-11-14
 
 - Installs itself per user (no admin) to `%LOCALAPPDATA%\Programs\Sakin`, with a Start menu shortcut and an

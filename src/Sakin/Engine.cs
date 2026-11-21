@@ -63,7 +63,10 @@ internal sealed class Engine : IDisposable
         public uint Prio;
         public uint Mem;
         public uint PowerControl, PowerState;
-        public int Level;
+        public int Level;            // 1 calm, 2 sleep, 3 boost
+        public bool WsPinned;        // Boost set a hard minimum working set
+        public long WsMin, WsMax;    // the limits it had before
+        public double PinMB;
     }
 
     sealed class Group
@@ -84,7 +87,8 @@ internal sealed class Engine : IDisposable
         public string BusyWhy = "";
         public double BusyPct;
         public double Cpu30 = 100;
-        public long EmptySince;       // average CPU over the last 30 s (100 until measured)
+        public long EmptySince;
+        public double PinnedMB;
         public string State = "";
         public string Reason = "";
         public long LastTrim;
@@ -133,6 +137,13 @@ internal sealed class Engine : IDisposable
     volatile int _sumCalm, _sumSleep;
     Dictionary<int, ProcRow> _byPid = new();
     string _fgKey = "";
+    string _lastAppKey = "";       // the last real app that was in front (not the shell, not Sakin)
+    string? _boostKey;             // the app getting the machine first, if any
+    long _boostSince, _lastPinMs;
+    bool _boostFirstPassDone;
+    double _boostFreedMB;
+    public volatile string? BoostName;
+    public volatile string LastAppName = "";
     int _logId;
     public bool Paused { get; private set; }
     long _pausedUntil; // unix ms, 0 = until resumed
@@ -141,6 +152,7 @@ internal sealed class Engine : IDisposable
     public event Action<string>? Snapshot;   // JSON for the window
     public event Action<string>? Toast;
     public event Action? ModeChanged;        // so the tray menu can follow
+    public event Action<string, bool>? BoostChanged;   // app name, on/off
 
     static long UnixMs => DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
 
@@ -149,6 +161,8 @@ internal sealed class Engine : IDisposable
         _s = s;
         _admin = admin;
         _thread = new Thread(Loop) { IsBackground = true, Name = "sakin-engine", Priority = ThreadPriority.AboveNormal };
+        // raising another process's minimum working set needs this privilege; every user holds it, but it starts off
+        Native.EnablePrivilege("SeIncreaseWorkingSetPrivilege");
     }
 
     public void Start()
@@ -275,6 +289,13 @@ internal sealed class Engine : IDisposable
             if (!_byPid.TryGetValue(pid, out var r) || r.CreateTime != _tweaks[pid].Create) { _tweaks.Remove(pid); _journalDirty = true; }
 
         _fgKey = ForegroundKey(fgPid);
+        if (_groups.TryGetValue(_fgKey, out var fgg) && !fgg.Guard && _fgKey != "sakin" && fgg.Procs.Count > 0)
+        {
+            _lastAppKey = _fgKey;
+            if (fgg.Name != "") LastAppName = fgg.Name;
+        }
+        if (_boostKey != null && (!_groups.TryGetValue(_boostKey, out var bg) || bg.Procs.Count == 0 && now - bg.EmptySince > 5000))
+            StopBoost("closed");
 
         // ---- decide and act ----
         bool onBattery = SystemInformation.PowerStatus.PowerLineStatus == PowerLineStatus.Offline;
@@ -290,11 +311,15 @@ internal sealed class Engine : IDisposable
             string prev = g.State;
             Decide(g, now, graceMs, dormantMs);
             if (prev != g.State) OnTransition(g, prev);
-            int level = g.State switch { "calm" => 1, "sleep" => 2, _ => 0 };
+            int level = g.State switch { "calm" => 1, "sleep" => 2, "boost" => 3, _ => 0 };
             foreach (var p in g.Procs) Apply(p, level);
         }
 
-        if (!fgOnly && !Paused) TrimIfShort(now);
+        if (!fgOnly && !Paused)
+        {
+            if (_boostKey != null) { PinBoosted(ms); FreeForBoost(now); }
+            else TrimIfShort(now);
+        }
 
         if (_journalDirty) SaveJournal();
         if (_statsDirty && ms - _lastStatsSave > 60_000) { _s.Save(); _statsDirty = false; _lastStatsSave = ms; }
@@ -342,6 +367,7 @@ internal sealed class Engine : IDisposable
         g.Reason = "";
         g.Locked = false;
 
+        if (g.Key == _boostKey) { g.SeenFg = true; g.LastActive = now; g.State = "boost"; return; }
         if (g.Key == _fgKey) { g.SeenFg = true; g.LastActive = now; g.State = "fg"; return; }
         if (g.Guard) { g.State = "guard"; g.Reason = GuardReason.GetValueOrDefault(g.Key, "system"); return; }
         if (rule == "never") { g.State = "guard"; g.Reason = "rule-never"; return; }
@@ -354,6 +380,8 @@ internal sealed class Engine : IDisposable
             if (g.Audio && _s.RespectAudio) { g.State = "work"; g.Reason = "audio"; g.LastActive = now; return; }
             if (g.Busy) { g.State = "work"; g.Reason = g.BusyWhy; g.LastActive = now; return; }
         }
+        // while another app is boosted, everything else in the background steps aside at once
+        if (_boostKey != null) { g.State = "sleep"; g.Reason = "boost"; return; }
         long idle = now - g.LastActive;
         if (idle < graceMs) { g.State = "wait"; g.Reason = ((graceMs - idle + 999) / 1000).ToString(); return; }
         g.State = idle >= dormantMs ? "sleep" : "calm";
@@ -364,7 +392,7 @@ internal sealed class Engine : IDisposable
         switch (g.State)
         {
             case "calm" when prev == "wait" || prev == "work": Log("calm", "calmed", g.Name); break;
-            case "sleep": Log("calm", "slept", g.Name, _s.DormantMin); break;
+            case "sleep" when g.Reason != "boost": Log("calm", "slept", g.Name, _s.DormantMin); break;
             case "work" when prev is "calm" or "sleep" or "wait":
                 Log("work", g.Audio && _s.RespectAudio ? "audio" : "working", g.Name); break;
             case "fg" when prev == "sleep" && g.TrimmedMB > 0: Log("info", "back", g.Name); break;
@@ -396,6 +424,7 @@ internal sealed class Engine : IDisposable
         try
         {
             bool inherited = _inherited.TryGetValue(p.Pid, out long ic) && ic == p.CreateTime;
+            if (t != null && t.WsPinned && level != 3) Unpin(p.Pid, t);
             if (level == 0)
             {
                 if (t != null) { Restore(h, t); _tweaks.Remove(p.Pid); _journalDirty = true; }
@@ -420,6 +449,26 @@ internal sealed class Engine : IDisposable
                 var pw = new Native.PROCESS_POWER_THROTTLING_STATE { Version = Native.PROCESS_POWER_THROTTLING_CURRENT_VERSION };
                 if (Native.GetProcessInformation(h, Native.ProcessPowerThrottling, ref pw, 12)) { t.PowerControl = pw.ControlMask; t.PowerState = pw.StateMask; }
                 if (t.Prio == 0) return; // couldn't even read it: leave the process alone
+            }
+
+            if (level == 3)
+            {
+                // the boosted app: above-normal CPU priority (never lowering one that set itself higher),
+                // full memory priority, and explicitly *not* throttled, even while it is in the background
+                if (Rank(t.Prio) <= Rank(Native.NORMAL_PRIORITY_CLASS)) Native.SetPriorityClass(h, Native.ABOVE_NORMAL_PRIORITY_CLASS);
+                var full = new Native.MEMORY_PRIORITY_INFORMATION { MemoryPriority = Native.MEMORY_PRIORITY_NORMAL };
+                Native.SetProcessInformation(h, Native.ProcessMemoryPriority, ref full, 4);
+                var fast = new Native.PROCESS_POWER_THROTTLING_STATE
+                {
+                    Version = Native.PROCESS_POWER_THROTTLING_CURRENT_VERSION,
+                    ControlMask = Native.PROCESS_POWER_THROTTLING_EXECUTION_SPEED,
+                    StateMask = 0,
+                };
+                Native.SetProcessInformation(h, Native.ProcessPowerThrottling, ref fast, 12);
+                t.Level = 3;
+                _tweaks[p.Pid] = t;
+                _journalDirty = true;
+                return;
             }
 
             int s = _s.Level;
@@ -486,12 +535,126 @@ internal sealed class Engine : IDisposable
             IntPtr h = Native.OpenProcess(Native.PROCESS_SET_INFORMATION | Native.PROCESS_QUERY_LIMITED_INFORMATION, false, pid);
             if (h == IntPtr.Zero) continue;
             // make sure the pid still belongs to the process we changed
-            if (_byPid.TryGetValue(pid, out var r) && r.CreateTime == t.Create) Restore(h, t);
+            if (_byPid.TryGetValue(pid, out var r) && r.CreateTime == t.Create) { Restore(h, t); if (t.WsPinned) Unpin(pid, t); }
             Native.CloseHandle(h);
         }
         _tweaks.Clear();
         foreach (var g in _groups.Values) if (g.State is "calm" or "sleep") g.State = "off";
         SaveJournal();
+    }
+
+    /// <summary>Takes away the hard minimum working set Boost gave a process, back to the limits it had.</summary>
+    void Unpin(int pid, Tweak t)
+    {
+        IntPtr h = Native.OpenProcess(Native.PROCESS_SET_QUOTA | Native.PROCESS_QUERY_LIMITED_INFORMATION, false, pid);
+        if (h != IntPtr.Zero)
+        {
+            Native.SetProcessWorkingSetSizeEx(h, (IntPtr)t.WsMin, (IntPtr)t.WsMax, Native.QUOTA_LIMITS_HARDWS_MIN_DISABLE | Native.QUOTA_LIMITS_HARDWS_MAX_DISABLE);
+            Native.CloseHandle(h);
+        }
+        t.WsPinned = false;
+        t.PinMB = 0;
+        _journalDirty = true;
+    }
+
+    // ---------------- boost ----------------
+    const double PinCapFraction = 0.5;   // never pin more than half the RAM, so Windows itself can breathe
+
+    /// <summary>
+    /// Holds the boosted app's memory in RAM: a hard minimum working set equal to what it uses now, so
+    /// Windows can't page it out to make room for others. Re-checked every 5 s as the app grows.
+    /// </summary>
+    void PinBoosted(long ms)
+    {
+        if (ms - _lastPinMs < 5000 || _boostKey == null || !_groups.TryGetValue(_boostKey, out var g)) return;
+        _lastPinMs = ms;
+        double cap = _totalMB * PinCapFraction, used = 0, pinned = 0;
+        foreach (var p in g.Procs.OrderByDescending(p => p.PrivateBytes))
+        {
+            double mb = p.PrivateBytes / 1048576.0;
+            if (mb < 32) continue;
+            double target = Math.Min(mb, cap - used);
+            if (target < 32) break;
+            used += target;
+            if (!_tweaks.TryGetValue(p.Pid, out var t) || t.Create != p.CreateTime || t.Level != 3) continue;
+            if (t.WsPinned && target <= t.PinMB * 1.1 && target >= t.PinMB * 0.9) { pinned += t.PinMB; continue; }
+            IntPtr h = Native.OpenProcess(Native.PROCESS_SET_QUOTA | Native.PROCESS_QUERY_LIMITED_INFORMATION, false, p.Pid);
+            if (h == IntPtr.Zero) continue;
+            try
+            {
+                if (!t.WsPinned && Native.GetProcessWorkingSetSizeEx(h, out IntPtr mn, out IntPtr mx, out _)) { t.WsMin = (long)mn; t.WsMax = (long)mx; }
+                long minB = (long)(target * 1048576);
+                bool ok = false;
+                // Windows refuses a minimum it can't guarantee; ask for less until it agrees
+                for (int i = 0; i < 4 && !ok && minB >= (32L << 20); i++)
+                {
+                    long maxB = Math.Max(minB + (256L << 20), t.WsMax);
+                    ok = Native.SetProcessWorkingSetSizeEx(h, (IntPtr)minB, (IntPtr)maxB, Native.QUOTA_LIMITS_HARDWS_MIN_ENABLE | Native.QUOTA_LIMITS_HARDWS_MAX_DISABLE);
+                    if (!ok) minB /= 2;
+                }
+                if (ok) { t.WsPinned = true; t.PinMB = minB / 1048576.0; pinned += t.PinMB; _journalDirty = true; }
+            }
+            finally { Native.CloseHandle(h); }
+        }
+        g.PinnedMB = pinned;
+    }
+
+    /// <summary>Makes room for the boosted app: every quiet background app hands its RAM back at once, then again whenever RAM runs short.</summary>
+    void FreeForBoost(long now)
+    {
+        var others = _groups.Values.Where(g => g.State == "sleep" && g.Reason == "boost" && g.PrivateMB >= MinTrimMB);
+        if (!_boostFirstPassDone)
+        {
+            var batch = others.Where(g => g.LastTrim < _boostSince).OrderByDescending(g => g.PrivateMB).Take(4).ToList();
+            foreach (var g in batch) _boostFreedMB += Trim(g, now);
+            if (batch.Count == 0)
+            {
+                _boostFirstPassDone = true;
+                if (_boostFreedMB >= 1) Log("trim", "boostFreed", BoostName ?? "", _boostFreedMB);
+            }
+            return;
+        }
+        if (_availMB / _totalMB * 100 >= 25) return;
+        var pick = others.Where(g => now - g.LastTrim > 120_000).OrderByDescending(g => g.PrivateMB).FirstOrDefault();
+        if (pick == null) return;
+        double freed = Trim(pick, now);
+        _boostFreedMB += freed;
+        if (freed >= 1) Log("trim", "trim", pick.Name, freed, (_availMB / _totalMB * 100).ToString("0"));
+    }
+
+    /// <summary>Boost an app (null = the last real app that was in front); the same app again turns it off.</summary>
+    public void ToggleBoost(string? key)
+    {
+        key ??= _lastAppKey;
+        if (_boostKey != null && (key == _boostKey || key == "")) { StopBoost("user"); return; }
+        if (_boostKey != null) StopBoost("user");
+        if (Paused) Resume();
+        if (key == "" || !_groups.TryGetValue(key, out var g) || g.Guard || g.Procs.Count == 0 || (!_admin && !CanTouch(g.RootPid)))
+        {
+            Toast?.Invoke(JsonSerializer.Serialize(new { type = "toast", code = "boostNo", app = _groups.TryGetValue(key, out var x) ? x.Name : key, num = 0 }));
+            return;
+        }
+        _boostKey = key;
+        _boostSince = UnixMs;
+        _boostFirstPassDone = false;
+        _boostFreedMB = 0;
+        _lastPinMs = 0;
+        BoostName = g.Name;
+        Log("boost", "boost", g.Name);
+        BoostChanged?.Invoke(g.Name, true);
+        ModeChanged?.Invoke();
+    }
+
+    public void StopBoost(string why)
+    {
+        if (_boostKey == null) return;
+        string name = BoostName ?? _boostKey;
+        if (_groups.TryGetValue(_boostKey, out var g)) g.PinnedMB = 0;
+        _boostKey = null;
+        BoostName = null;
+        Log("info", why == "closed" ? "boostClosed" : "unboost", name);
+        BoostChanged?.Invoke(name, false);
+        ModeChanged?.Invoke();
     }
 
     // ---------------- memory ----------------
@@ -563,6 +726,7 @@ internal sealed class Engine : IDisposable
 
     public void Pause(int minutes)
     {
+        StopBoost("pause");
         Paused = true;
         _pausedUntil = minutes > 0 ? UnixMs + minutes * 60_000L : 0;
         RestoreAll();
@@ -591,7 +755,7 @@ internal sealed class Engine : IDisposable
 
     public void TrimNow(string key)
     {
-        if (!_groups.TryGetValue(key, out var g) || g.State is "fg" or "guard" or "locked") return;
+        if (!_groups.TryGetValue(key, out var g) || g.State is "fg" or "guard" or "locked" or "boost") return;
         double freed = Trim(g, UnixMs);
         if (freed >= 1) Log("trim", "trimManual", g.Name, freed);
         Toast?.Invoke(JsonSerializer.Serialize(new { type = "toast", code = freed >= 1 ? "trimmed" : "nothing", app = g.Name, num = Math.Round(freed) }));
@@ -798,7 +962,7 @@ internal sealed class Engine : IDisposable
         {
             Directory.CreateDirectory(Settings.Dir);
             if (_tweaks.Count == 0) { if (File.Exists(JournalPath)) File.Delete(JournalPath); return; }
-            var list = _tweaks.Select(kv => new long[] { kv.Key, kv.Value.Create, kv.Value.Prio, kv.Value.Mem, kv.Value.PowerControl, kv.Value.PowerState }).ToList();
+            var list = _tweaks.Select(kv => new long[] { kv.Key, kv.Value.Create, kv.Value.Prio, kv.Value.Mem, kv.Value.PowerControl, kv.Value.PowerState, kv.Value.WsPinned ? 1 : 0, kv.Value.WsMin, kv.Value.WsMax }).ToList();
             File.WriteAllText(JournalPath, JsonSerializer.Serialize(list));
         }
         catch { }
@@ -820,6 +984,7 @@ internal sealed class Engine : IDisposable
                 if (h == IntPtr.Zero) continue;
                 Restore(h, new Tweak { Prio = (uint)e[2], Mem = (uint)e[3], PowerControl = (uint)e[4], PowerState = (uint)e[5] });
                 Native.CloseHandle(h);
+                if (e.Length >= 9 && e[6] == 1) Unpin(pid, new Tweak { WsMin = e[7], WsMax = e[8] });
                 n++;
             }
             File.Delete(JournalPath);
@@ -852,7 +1017,7 @@ internal sealed class Engine : IDisposable
         var by = new Dictionary<string, double> { ["fg"] = 0, ["work"] = 0, ["calm"] = 0, ["sleep"] = 0 };
         foreach (var g in _groups.Values)
         {
-            string b = g.State switch { "fg" or "wait" => "fg", "work" => "work", "calm" => "calm", "sleep" => "sleep", _ => "" };
+            string b = g.State switch { "fg" or "wait" or "boost" => "fg", "work" => "work", "calm" => "calm", "sleep" => "sleep", _ => "" };
             if (b != "") by[b] += g.PrivateMB;
         }
         double used = _totalMB - _availMB;
@@ -871,6 +1036,7 @@ internal sealed class Engine : IDisposable
             waitSec = g.State == "wait" && int.TryParse(g.Reason, out int w) ? w : 0,
             idleSec = Math.Max(0, (now - g.LastActive) / 1000),
             trimmedMB = Math.Round(g.TrimmedMB),
+            pinnedMB = Math.Round(g.PinnedMB),
         }).ToList();
 
         var snap = new
@@ -881,6 +1047,7 @@ internal sealed class Engine : IDisposable
             admin = _admin,
             selfMB = _byPid.TryGetValue(_selfPid, out var meRow) ? meRow.PrivateBytes / 1048576.0 : 0,
             mode = _s.Mode,
+            boost = _boostKey == null ? null : new { key = _boostKey, name = BoostName, since = _boostSince, freedMB = Math.Round(_boostFreedMB), firstPassDone = _boostFirstPassDone },
             paused = Paused,
             pausedUntil = _pausedUntil == 0 ? (long?)null : _pausedUntil,
             settings = new

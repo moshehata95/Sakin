@@ -6,8 +6,8 @@
   const bridge = window.chrome && window.chrome.webview ? window.chrome.webview : window.SakinMock;
   const send = (type, data) => bridge.postMessage(JSON.stringify(Object.assign({ type }, data || {})));
 
-  const ORDER = { fg: 0, work: 1, wait: 2, calm: 3, sleep: 4, locked: 5, guard: 6, off: 7 };
-  const CLS = { fg: "st-fg", work: "st-work", wait: "st-wait", calm: "st-calm", sleep: "st-sleep", guard: "st-guard", locked: "st-locked", off: "st-wait" };
+  const ORDER = { boost: -1, fg: 0, work: 1, wait: 2, calm: 3, sleep: 4, locked: 5, guard: 6, off: 7 };
+  const CLS = { boost: "st-boost", fg: "st-fg", work: "st-work", wait: "st-wait", calm: "st-calm", sleep: "st-sleep", guard: "st-guard", locked: "st-locked", off: "st-wait" };
   const SEGS = ["fg", "work", "calm", "sleep", "other"];
 
   let S = null;
@@ -117,6 +117,7 @@
   function why(a) {
     const w = L.why;
     switch (a.state) {
+      case "boost": return w.boost(a.pinnedMB);
       case "fg": return w.fg;
       case "work": return typeof w[a.reason] === "function" ? w[a.reason](a.reasonPct) : (w[a.reason] || "");
       case "wait": return w.wait(a.waitSec);
@@ -201,6 +202,10 @@
     for (const el of document.querySelectorAll("[data-set]")) el.checked = !!flags[el.dataset.set];
     for (const el of document.querySelectorAll("[data-out]")) el.textContent = S.settings[el.dataset.out];
     $("#aboutLine").textContent = L.aboutLine(S.version, S.admin, S.selfMB);
+
+    const band = $("#boostBand");
+    band.hidden = !S.boost;
+    if (S.boost) $("#boostText").innerHTML = L.boostBand(esc(S.boost.name || ""), S.boost.firstPassDone ? S.boost.freedMB : 0);
   }
 
   function render() {
@@ -233,6 +238,7 @@
     pauseMenu.hidden = true;
   });
   $("#resumeBtn").addEventListener("click", () => send("resume"));
+  $("#boostStop").addEventListener("click", () => send("unboost"));
 
   $("#tabs").addEventListener("click", (e) => {
     const b = e.target.closest("button[data-f]");
@@ -256,7 +262,12 @@
     const a = S.apps.find((x) => x.key === key);
     $("#rowMenuTitle").textContent = a ? a.name : "";
     for (const m of rowMenu.querySelectorAll("[data-rule]")) m.setAttribute("aria-checked", String((a && a.rule || "auto") === m.dataset.rule));
-    rowMenu.querySelector('[data-act="trim"]').hidden = !a || ["fg", "guard", "locked", "off"].includes(a.state);
+    rowMenu.querySelector('[data-act="trim"]').hidden = !a || ["fg", "guard", "locked", "off", "boost"].includes(a.state);
+    const bi = rowMenu.querySelector('[data-act="boost"]');
+    bi.hidden = !a || ["guard", "locked"].includes(a.state);
+    bi.classList.toggle("on", !!a && a.state === "boost");
+    $("#boostItemLabel").textContent = a && a.state === "boost" ? L.stopBoostThis : L.boostThis;
+    bi.querySelector("small").hidden = !!a && a.state === "boost";
     rowMenu.hidden = false;
     const r = b.getBoundingClientRect();
     const mh = rowMenu.offsetHeight, mw = rowMenu.offsetWidth;
@@ -269,6 +280,7 @@
     if (!b || !menuKey) return;
     if (b.dataset.rule) send("setRule", { key: menuKey, rule: b.dataset.rule });
     if (b.dataset.act === "trim") send("trimNow", { key: menuKey });
+    if (b.dataset.act === "boost") send("boost", { key: menuKey });
     closeMenus();
   });
 

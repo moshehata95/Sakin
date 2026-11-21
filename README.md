@@ -90,6 +90,32 @@ that have been idle for at least two minutes.
 
 Every number can be changed in Settings. With *Be stricter on battery* on, the wait and asleep times are halved when unplugged.
 
+## Boost: one app gets the machine
+
+When one app matters right now (Illustrator choking on a big file, an export you're waiting for), boost it:
+
+- press **Ctrl+Alt+B** while it's in front (works even when it has stopped responding), or
+- right-click the tray icon › **Boost …**, or
+- open the app's **⋯** menu in the window › **Boost this app**.
+
+While an app is boosted:
+
+- every other app in the background is calmed at once and its RAM handed back (except apps rendering or playing sound);
+- the boosted app's memory is **held in RAM**: Sakin sets a hard minimum working set equal to what it uses, up to
+  half your RAM, so Windows can't page it out to make room for something else;
+- it runs at above-normal priority and is never throttled, even while you look at another window.
+
+Press the shortcut again, click **Stop boost**, or close the app, and everything goes back exactly as it was.
+
+![Boost in the Sakin window](docs/sakin-boost.png)
+
+Measured: with a 5 GB memory flood in the background, a boosted 700 MB app kept 756 MB in RAM and re-read all
+its data in 55 ms. Without Boost, Windows paged it out to 10 MB and the same re-read took 372 ms
+([details](docs/BENCHMARKS.md#boost-toolsboost-testps1)).
+
+Boost helps when an app is slow because RAM is full. If it's slow because the file is heavy on the CPU or GPU,
+the higher priority helps a little, but no tool can add CPU power.
+
 ## Per-app rules
 
 Open the **⋯** menu on any app:
@@ -151,6 +177,7 @@ tools/
   ram-test.ps1    A/B memory benchmark
   cpu-test.ps1    foreground speed under background load
   test-switch.ps1 calm-then-switch-back latency
+  boost-test.ps1  Boost A/B under a memory flood
   bench/          the test apps used by the benchmarks
 docs/
   ARCHITECTURE.md
