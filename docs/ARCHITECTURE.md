@@ -113,7 +113,16 @@ thread also holds `ES_SYSTEM_REQUIRED`.
 Sakin never turns the display off itself. `SendMessage(HWND_BROADCAST, WM_SYSCOMMAND, SC_MONITORPOWER, 2)` looks
 harmless, but on Modern Standby laptops (S0 low power idle) Windows treats it like the power button and enters
 standby, which suspends desktop apps, Claude included, whatever power requests are held. Version 1.3.0 to 1.3.2 had
-a *Screen off* button that did exactly that; it was removed in 1.3.3.
+a *Screen off* button that did exactly that; it was removed in 1.3.3. The event log then showed that the plan's
+own screen timeout does the same (Kernel-Power 506, "entering Modern Standby", the moment the display went off),
+so since 1.3.4 Claude mode sets `VIDEOIDLE` and `VIDEOCONLOCK` to 0 and `ScreenBlanker` (TrayApp) blanks the screens
+instead: one black, non-activating, topmost window per monitor and the panel brightness at 0 through
+`WmiMonitorBrightnessMethods`, undone on the first input. Tested: blanked for 3 minutes with no standby event and
+no stalls in a watcher process; restored on a mouse move.
+
+**Apps Windows starts for Claude.** Notepad and Edge are started through the shell and Office through COM, so they
+aren't in Claude's process tree. While nobody is at the PC, a process created after Claude mode started marks its
+app as used by Claude.
 
 **Do not disturb.** `QuietHours` uses the same object as the Settings app (`QuietHoursSettings`,
 `IQuietHoursSettings::put_UserSelectedProfile`) on a short-lived STA thread. Entering sets

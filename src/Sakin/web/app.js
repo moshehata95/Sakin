@@ -222,6 +222,7 @@
       $("#cbAsleep").textContent = c.asleep;
       $("#cbFreed").innerHTML = sizeHtml(c.freedMB);
       if (!c.plan) $("#claudeSub").textContent = iso(L.claudeNoPlan);
+
     }
   }
 

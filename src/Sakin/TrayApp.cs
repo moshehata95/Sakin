@@ -13,6 +13,7 @@ internal sealed class TrayApp : ApplicationContext
     readonly Control _ui;                         // marshals engine events onto this thread
     MainWindow? _window;
     readonly HotkeyWindow _hotkey;
+    readonly ScreenBlanker _blanker;
     bool? _lastPaused;
     bool _exiting;
 
@@ -31,6 +32,7 @@ internal sealed class TrayApp : ApplicationContext
         _tray.MouseClick += (_, e) => { if (e.Button == MouseButtons.Left) ShowWindow(); };
         // Ctrl+Alt+B boosts whatever app you were just using, even when it has stopped responding
         _hotkey = new HotkeyWindow(() => _engine.Post(() => _engine.ToggleBoost(null)));
+        _blanker = new ScreenBlanker(_s, () => _engine.ClaudeOn);
         RefreshTray();
         BuildMenu();
 
@@ -144,6 +146,118 @@ internal sealed class TrayApp : ApplicationContext
         old?.Dispose();
     }
 
+    /// <summary>
+    /// Claude mode's "screen off". Windows must never turn the display off in Claude mode: on Modern Standby laptops
+    /// that is standby, and desktop apps freeze. So when nobody has touched the PC for the set time, every screen is
+    /// covered with a black window and the laptop panel goes to its lowest brightness. To Windows the display is
+    /// still on, so the PC stays fully awake. Any mouse or keyboard input takes the black away and puts the
+    /// brightness back. The old brightness is kept in the settings, so a crash can't leave the panel dark.
+    /// </summary>
+    sealed class ScreenBlanker : IDisposable
+    {
+        readonly Settings _s;
+        readonly Func<bool> _active;
+        readonly System.Windows.Forms.Timer _timer = new() { Interval = 2000 };
+        readonly List<Form> _covers = new();
+        public bool Blanked => _covers.Count > 0;
+
+        public ScreenBlanker(Settings s, Func<bool> active)
+        {
+            _s = s; _active = active;
+            if (_s.ClaudePrevBrightness >= 0) { Brightness.Set(_s.ClaudePrevBrightness); _s.ClaudePrevBrightness = -1; _s.Save(); }
+            _timer.Tick += (_, _) => Check();
+            _timer.Start();
+        }
+
+        void Check()
+        {
+            long idle = Native.IdleInputMs();
+            if (Blanked)
+            {
+                if (idle < 1500 || !_active()) Unblank();
+                return;
+            }
+            if (_active() && idle >= _s.ClaudeScreenOffMin * 60_000L) Blank();
+        }
+
+        public void Blank()
+        {
+            if (Blanked) return;
+            foreach (var screen in Screen.AllScreens)
+            {
+                var f = new Cover { Bounds = screen.Bounds };
+                f.Show();
+                _covers.Add(f);
+            }
+            int cur = Brightness.Get();
+            if (cur > 0) { _s.ClaudePrevBrightness = cur; _s.Save(); Task.Run(() => Brightness.Set(0)); }
+            _timer.Interval = 250;   // wake quickly on the first touch
+        }
+
+        public void Unblank()
+        {
+            foreach (var f in _covers) f.Close();
+            _covers.Clear();
+            int prev = _s.ClaudePrevBrightness;
+            if (prev >= 0) { _s.ClaudePrevBrightness = -1; _s.Save(); Task.Run(() => Brightness.Set(prev)); }
+            _timer.Interval = 2000;
+        }
+
+        public void Dispose()
+        {
+            _timer.Dispose();
+            foreach (var f in _covers) f.Close();
+            _covers.Clear();
+            // quitting: put the brightness back right now, not on a background task that may not finish
+            if (_s.ClaudePrevBrightness >= 0) { Brightness.Set(_s.ClaudePrevBrightness); _s.ClaudePrevBrightness = -1; _s.Save(); }
+        }
+
+        sealed class Cover : Form
+        {
+            public Cover()
+            {
+                FormBorderStyle = FormBorderStyle.None;
+                BackColor = Color.Black;
+                ShowInTaskbar = false;
+                TopMost = true;
+                StartPosition = FormStartPosition.Manual;
+                Cursor = new Cursor(new Bitmap(1, 1).GetHicon());   // no pointer on the black
+            }
+            protected override bool ShowWithoutActivation => true;   // never take the focus from the app Claude is using
+            protected override CreateParams CreateParams
+            {
+                get { var cp = base.CreateParams; cp.ExStyle |= 0x08000000 /* NOACTIVATE */ | 0x80 /* TOOLWINDOW */ | 0x8 /* TOPMOST */; return cp; }
+            }
+        }
+    }
+
+    /// <summary>Laptop panel brightness through WMI (works without administrator rights; external monitors aren't affected).</summary>
+    static class Brightness
+    {
+        public static int Get()
+        {
+            try
+            {
+                string o = Ps("(Get-CimInstance -Namespace root/wmi -ClassName WmiMonitorBrightness -ErrorAction Stop | Select-Object -First 1).CurrentBrightness");
+                return int.TryParse(o.Trim(), out int v) ? v : -1;
+            }
+            catch { return -1; }
+        }
+        public static void Set(int v)
+        {
+            try { Ps($"Get-CimInstance -Namespace root/wmi -ClassName WmiMonitorBrightnessMethods -ErrorAction Stop | Invoke-CimMethod -MethodName WmiSetBrightness -Arguments @{{Timeout=0; Brightness=[byte]{Math.Clamp(v, 0, 100)}}} | Out-Null"); }
+            catch { }
+        }
+        static string Ps(string cmd)
+        {
+            var psi = new System.Diagnostics.ProcessStartInfo("powershell.exe", "-NoProfile -NonInteractive -Command \"" + cmd.Replace("\"", "\\\"") + "\"")
+            { CreateNoWindow = true, UseShellExecute = false, RedirectStandardOutput = true };
+            using var p = System.Diagnostics.Process.Start(psi)!;
+            string o = p.StandardOutput.ReadToEnd();
+            p.WaitForExit(15_000);
+            return o;
+        }
+    }
     /// <summary>A message-only window that receives the global hotkey.</summary>
     sealed class HotkeyWindow : NativeWindow, IDisposable
     {
@@ -253,6 +367,7 @@ internal sealed class TrayApp : ApplicationContext
         _timer.Stop();
         if (_hook != IntPtr.Zero) Native.UnhookWinEvent(_hook);
         _hotkey.Dispose();
+        _blanker.Dispose();
         _window?.Close();
         _engine.Dispose();      // restores every process it changed
         _tray.Visible = false;

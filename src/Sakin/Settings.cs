@@ -25,10 +25,11 @@ internal sealed class Settings
     public int ClaudeLingerMin { get; set; } = 5;       // an app Claude used stays awake this long after
     public int ClaudeScreenOffMin { get; set; } = 2;
     public bool ClaudeCool { get; set; } = true;        // CPU without turbo: cooler and quieter for days
-    public List<string> ClaudeApps { get; set; } = new() { "chrome", "illustrator", "photoshop", "adobe premiere pro", "afterfx", "powerpnt", "winword", "excel" };
+    public List<string> ClaudeApps { get; set; } = new() { "chrome", "msedge", "illustrator", "photoshop", "adobe premiere pro", "afterfx", "powerpnt", "winword", "excel" };
     public bool ClaudeQuiet { get; set; } = true;       // Do not disturb while Claude mode is on
     public string ClaudePrevQuiet { get; set; } = "";   // the Do-not-disturb profile to go back to
     public string ClaudeQuietSet { get; set; } = "";    // the profile we set ("" = we didn't change it)
+    public int ClaudePrevBrightness { get; set; } = -1;   // laptop panel brightness before blanking (-1 = not blanked)
     public string ClaudeScheme { get; set; } = "";      // our power plan while Claude mode is on
     public string ClaudePrevScheme { get; set; } = "";  // the plan to go back to
 

@@ -54,7 +54,10 @@ internal static class PowerPlan
         Both("SUB_SLEEP", "STANDBYIDLE", 0);              // never sleep
         Both("SUB_SLEEP", "HIBERNATEIDLE", 0);            // never hibernate
         Both("SUB_BUTTONS", "LIDACTION", 0);              // closing the lid does nothing
-        Both("SUB_VIDEO", "VIDEOIDLE", s.ClaudeScreenOffMin * 60);
+        // never let Windows turn the display off: on Modern Standby laptops that IS standby, which freezes desktop
+        // apps. ساكن blanks the screens itself instead (black windows + lowest brightness), see ScreenBlanker.
+        Both("SUB_VIDEO", "VIDEOIDLE", 0);
+        Both("SUB_VIDEO", "VIDEOCONLOCK", 0);            // nor on the lock screen
         Both("SUB_PROCESSOR", "PROCTHROTTLEMIN", 5);
         Both("SUB_PROCESSOR", "PROCTHROTTLEMAX", s.ClaudeCool ? 99 : 100);  // 99 % already keeps most laptops off turbo
         Both("SUB_PROCESSOR", "PERFBOOSTMODE", s.ClaudeCool ? 0 : 2);       // 0 = turbo off, 2 = aggressive (Balanced's own)

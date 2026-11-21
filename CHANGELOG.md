@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 1.3.4 — 2026-11-22
+
+- **Fix:** Windows no longer turns the display off in Claude mode. On Modern Standby laptops that is standby itself
+  (the event log shows it), which freezes desktop apps. Sakin now blanks the screens instead: black on every monitor
+  and the laptop panel at its lowest brightness, back on the first touch. The PC stays fully awake.
+- Apps that Windows starts on Claude's behalf (Notepad and Edge through the shell, Office through COM) now wake up:
+  while nobody is at the PC, an app that opens or starts something new counts as Claude's.
+- Edge is on the *Claude uses this app* list by default.
+
 ## 1.3.3 — 2026-11-22
 
 - **Fix:** removed Claude mode's *Screen off* button and tray item. On Modern Standby laptops turning the display off

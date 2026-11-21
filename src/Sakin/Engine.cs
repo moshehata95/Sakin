@@ -163,6 +163,7 @@ internal sealed class Engine : IDisposable
     const double ClaudeWakeCpu = 2.0;    // an app Claude drives counts as used above this CPU (10 s average)
     bool _claudeOn;
     long _claudeSince, _lastTcpMs, _claudeLastBusy;
+    long _claudeSinceFt;   // the same moment as a FILETIME, to compare with process create times
     bool _claudeFirstPassDone, _userPresent = true;
     double _claudeFreedMB, _claudeCpu;
     string _claudePlanError = "";
@@ -170,6 +171,7 @@ internal sealed class Engine : IDisposable
     readonly Dictionary<string, long> _claudeUsedAt = new(StringComparer.OrdinalIgnoreCase);
     public volatile bool ClaudeOn;
     public volatile bool ClaudeBusy;
+    Dictionary<int, Group> _pidGroup = new();
     public event Action<bool>? ClaudeChanged;
 
     public bool Paused { get; private set; }
@@ -278,6 +280,7 @@ internal sealed class Engine : IDisposable
         _claudePids = _claudeOn ? ClaudeTree(self) : new HashSet<int>();
         double claudeCpu = 0;
         var pidGroup = new Dictionary<int, Group>();
+        HashSet<Group>? newForClaude = null;
         foreach (var g in _groups.Values) { g.Procs.Clear(); g.PrivateMB = 0; g.Cpu = 0; g.Gpu = 0; g.Audio = false; g.HasClaude = false; }
         var seenCpu = new HashSet<(int, long)>();
         foreach (var r in rows)
@@ -294,6 +297,11 @@ internal sealed class Engine : IDisposable
             pidGroup[r.Pid] = g;
             bool isClaude = _claudePids.Contains(r.Pid);
             if (isClaude) g.HasClaude = true;
+            // Nobody is at the PC, so a process that starts now was asked for by Claude, even when Windows
+            // launched it on Claude's behalf (Notepad and Edge go through the shell, Office through COM).
+            if (_claudeOn && !fgOnly && !_userPresent && !isClaude && r.CreateTime > _claudeSinceFt
+                && !_prevCpu.ContainsKey((r.Pid, r.CreateTime)))
+                (newForClaude ??= new()).Add(g);
             if (!_prevCpu.ContainsKey((r.Pid, r.CreateTime)) && !_inherited.ContainsKey(r.Pid)
                 && _byPid.TryGetValue(r.ParentPid, out var par) && par.CreateTime <= r.CreateTime
                 && ((_tweaks.TryGetValue(par.Pid, out var pt) && pt.Create == par.CreateTime && pt.Level > 0)
@@ -322,6 +330,8 @@ internal sealed class Engine : IDisposable
             foreach (var k in _keyCache.Keys.Where(k => !seenCpu.Contains(k)).ToList()) _keyCache.Remove(k);
         }
 
+        _pidGroup = pidGroup;
+        if (newForClaude != null) foreach (var g in newForClaude) MarkClaudeUsed(g, now);
         if (_claudeOn)
         {
             _userPresent = Native.IdleInputMs() < PresentMs;
@@ -541,6 +551,7 @@ internal sealed class Engine : IDisposable
             _claudeOn = true;
             ClaudeOn = true;
             _claudeSince = now;
+            _claudeSinceFt = DateTime.UtcNow.ToFileTimeUtc();
             _claudeLastBusy = now;
             _claudeFirstPassDone = false;
             _claudeFreedMB = 0;

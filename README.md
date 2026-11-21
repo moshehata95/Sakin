@@ -129,18 +129,23 @@ What runs:
 - **Apps Claude is using.** An app wakes up the moment Claude has a live local connection to it (an MCP bridge
   inside Premiere, a local server, a debugging port), or when an app on the *Claude uses this app* list starts
   working (Illustrator or Photoshop driven by script, Chrome through Claude's extension). It stays awake for
-  5 minutes after Claude stops using it, then goes back to sleep. Add or remove apps from the list in each app's **⋯** menu.
+  5 minutes after Claude stops using it, then goes back to sleep. And while nobody is at the PC, any app that
+  opens or starts something new counts as Claude's, because nobody else could have asked for it (Notepad, Edge and
+  Office are started by Windows on Claude's behalf, so they wouldn't show up as Claude's otherwise). Add or remove apps from the list in each app's **⋯** menu.
 - **Everything else sleeps at once**: lowest CPU priority, Efficiency mode, low memory priority, and its RAM handed
   back. That includes the window in front when nobody has touched the keyboard or mouse for 2 minutes. Come back
   and the window you use works as always.
 
 What changes on the PC (all put back when you turn Claude mode off, quit Sakin, or uninstall it):
 
-- A power plan of its own: **the PC never sleeps, closing the lid does nothing**, the screen turns off after
-  2 minutes, and with *Keep the CPU cool* on (the default) the CPU runs without turbo. Over days that means far
+- A power plan of its own: **the PC never sleeps, closing the lid does nothing**, and with *Keep the CPU cool* on (the default) the CPU runs without turbo. Over days that means far
   less heat and fan noise; a long build takes a little longer. Your own plan comes back exactly.
 - **Do not disturb** turns on, so notification sounds don't go off all night. If you already had it on, nothing changes; if you change it yourself meanwhile, your choice is kept. (Apps that draw their own popups, such as Telegram Desktop by default, don't go through Windows and aren't silenced.)
-- To turn a screen off yourself without stopping anything, close the lid (it does nothing in Claude mode) or switch the external monitor off with its own button. Some apps (a video in a browser tab, for example) ask Windows to keep the screen on, and then the timeout doesn't apply.
+- **The screens go black** after 2 minutes without input: Sakin covers every screen with a black window and turns
+  the laptop panel to its lowest brightness; touch the mouse or keyboard and everything comes back. Windows itself
+  never turns the display off in Claude mode, because on laptops with Modern Standby (most recent ones) a display
+  that turns off *is* standby: Windows freezes desktop apps, and Claude's sessions can drop. An external monitor
+  stays faintly lit behind the black; switch it off with its own button if you like, which is safe.
 
 Sakin can't stop Windows Update from restarting the PC. Pause updates before leaving the PC running for days.
 
