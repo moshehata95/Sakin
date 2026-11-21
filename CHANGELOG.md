@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 1.3.1 — 2026-11-21
+
+- *Support Sakin*: a quiet button in Settings › About and an item in the tray menu, opening PayPal. Sakin never
+  asks on its own. The repository's Sponsor button points to the same page.
+- Claude mode's "For Claude" count now includes Claude itself, not only the apps it is using.
+
 ## 1.3.0 — 2026-11-21
 
 - **Claude mode**, for leaving the PC running while Claude Code works. Claude and everything it starts run normally;

@@ -2,6 +2,14 @@ namespace Sakin;
 
 internal static class Program
 {
+    public const string DonateUrl = "https://paypal.me/DrMohamedShehata";
+
+    /// <summary>Opens the donation page in the default browser. The address is fixed here; the page can't pass one.</summary>
+    public static void OpenDonate()
+    {
+        try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(DonateUrl) { UseShellExecute = true }); } catch { }
+    }
+
     [STAThread]
     static int Main(string[] args)
     {

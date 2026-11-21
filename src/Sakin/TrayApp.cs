@@ -138,6 +138,7 @@ internal sealed class TrayApp : ApplicationContext
             menu.Items.Add(pause);
         }
         menu.Items.Add(new ToolStripSeparator());
+        menu.Items.Add(new ToolStripMenuItem(T("Support Sakin…", "ادعم ساكن…"), null, (_, _) => Program.OpenDonate()));
         menu.Items.Add(new ToolStripMenuItem(T("Quit and restore everything", "اقفل ساكن ورجّع كل حاجة"), null, (_, _) => Exit()));
 
         foreach (ToolStripItem it in menu.Items) if (it is ToolStripMenuItem mi) mi.DropDown.RightToLeft = menu.RightToLeft;

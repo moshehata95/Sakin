@@ -161,6 +161,10 @@ svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width:
 .claude-band .btn-line:hover { border-color: var(--paper); }
 .st-claude .pip { background: var(--ink); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ink) 18%, transparent); }
 .st-claude .lbl { color: var(--ink); font-weight: 600; }
+.support { display: flex; align-items: center; gap: 16px; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--rule-2); }
+.support-text { flex: 1; margin: 0; color: var(--ink-2); font-size: 12.5px; line-height: 1.6; }
+.support .btn-line { white-space: nowrap; }
+.support .btn-line svg { color: var(--s-fg); }
 .claude-note { color: var(--ink-3); font-size: 12px; line-height: 1.7; margin: 4px 0 10px; }
 .boost-band b { color: var(--ink); font-weight: 600; }
 .boost-band #boostText { flex: 1; }

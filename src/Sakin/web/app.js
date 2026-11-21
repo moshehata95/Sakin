@@ -259,6 +259,7 @@
   $("#claudeBtn").addEventListener("click", () => send("claude", { on: !(S && S.claude) }));
   $("#claudeStop").addEventListener("click", () => send("claude", { on: false }));
   $("#screenOffBtn").addEventListener("click", () => send("screenOff"));
+  $("#donateBtn").addEventListener("click", () => send("donate"));
 
   $("#tabs").addEventListener("click", (e) => {
     const b = e.target.closest("button[data-f]");

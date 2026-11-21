@@ -13,7 +13,8 @@
 <a href="../../releases/latest">التحميل</a> ·
 <a href="docs/ARCHITECTURE.md">بيشتغل إزاي (إنجليزي)</a> ·
 <a href="docs/BENCHMARKS.md">القياسات (إنجليزي)</a> ·
-<a href="README.md">English</a>
+<a href="README.md">English</a> ·
+<a href="https://paypal.me/DrMohamedShehata">ادعم ساكن</a>
 </p>
 
 ## الفكرة
@@ -124,6 +125,10 @@ Sakin.exe --claude-mode off
 ```
 powershell -File build.ps1
 ```
+
+## ادعم ساكن
+
+ساكن مجاني وهيفضل مجاني. لو وفّر عليك وقت، تقدر تدعمه بأي مبلغ على [PayPal](https://paypal.me/DrMohamedShehata)، أو من **Support Sakin** في الإعدادات أو في قايمة أيقونة الساعة.
 
 ## الرخصة
 

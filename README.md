@@ -11,7 +11,8 @@ A small, open-source Windows tray app that calms background apps and hands their
 <a href="../../releases/latest">Download</a> ·
 <a href="docs/ARCHITECTURE.md">How it works</a> ·
 <a href="docs/BENCHMARKS.md">Measurements</a> ·
-<a href="README.ar.md">بالعربي</a>
+<a href="README.ar.md">بالعربي</a> ·
+<a href="https://paypal.me/DrMohamedShehata">Support</a>
 </p>
 
 ![Sakin on a 16 GB laptop with RAM nearly full](docs/sakin-dark.png)
@@ -224,6 +225,11 @@ docs/
 ## Contributing
 
 Issues and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## Support
+
+Sakin is free and stays free. If it saves you time, you can support it with any amount on
+[PayPal](https://paypal.me/DrMohamedShehata), or from *Support Sakin* in the app's settings or tray menu.
 
 ## License
 
