@@ -197,7 +197,11 @@ internal sealed class Engine : IDisposable
         RestoreFromJournal();
         Log("info", "start", "", _admin ? 1 : 0, _s.Mode);
         if (_s.ClaudeMode) Post(() => SetClaudeMode(true));                 // it was on when ساكن last stopped
-        else if (_s.ClaudeScheme != "") PowerPlan.Leave(_s);                  // left over from a crash
+        else
+        {
+            if (_s.ClaudeScheme != "") PowerPlan.Leave(_s);                   // left over from a crash
+            if (_s.ClaudeQuietSet != "") { QuietHours.Leave(_s); _s.Save(); }
+        }
         _thread.Start();
     }
 
@@ -543,6 +547,7 @@ internal sealed class Engine : IDisposable
             _claudeUsedAt.Clear();
             _s.ClaudeMode = true;
             _claudePlanError = PowerPlan.Enter(_s) ?? "";
+            if (_s.ClaudeQuiet) QuietHours.Enter(_s);
             _s.Save();
             Native.SetThreadExecutionState(Native.ES_CONTINUOUS | Native.ES_SYSTEM_REQUIRED);   // the engine thread lives as long as ساكن
             Log("claude", "claudeOn", "", 0, _claudePlanError == "" ? "" : "noplan");
@@ -554,6 +559,7 @@ internal sealed class Engine : IDisposable
             ClaudeBusy = false;
             _s.ClaudeMode = false;
             PowerPlan.Leave(_s);
+            QuietHours.Leave(_s);
             _s.Save();
             Native.SetThreadExecutionState(Native.ES_CONTINUOUS);
             // back to the normal rules, with a short grace so nothing is slammed at once
@@ -985,6 +991,11 @@ internal sealed class Engine : IDisposable
             case "respectAudio": _s.RespectAudio = value; break;
             case "batteryBoost": _s.BatteryBoost = value; break;
             case "claudeCool": _s.ClaudeCool = value; _s.Save(); if (_claudeOn) PowerPlan.Apply(_s); return;
+            case "claudeQuiet":
+                _s.ClaudeQuiet = value;
+                if (_claudeOn) { if (value) QuietHours.Enter(_s); else QuietHours.Leave(_s); }
+                _s.Save();
+                return;
             case "langArabic": _s.Lang = value ? "ar" : "en"; _s.Save(); ModeChanged?.Invoke(); return;
             default: return;
         }
@@ -1272,7 +1283,7 @@ internal sealed class Engine : IDisposable
                 busyCpuPct = _s.BusyCpuPct, busyGpuPct = _s.BusyGpuPct,
                 startWithWindows = _s.StartWithWindows, elevated = _s.Elevated,
                 respectAudio = _s.RespectAudio, batteryBoost = _s.BatteryBoost, lang = _s.Lang,
-                claudeLingerMin = _s.ClaudeLingerMin, claudeScreenOffMin = _s.ClaudeScreenOffMin, claudeCool = _s.ClaudeCool,
+                claudeLingerMin = _s.ClaudeLingerMin, claudeScreenOffMin = _s.ClaudeScreenOffMin, claudeCool = _s.ClaudeCool, claudeQuiet = _s.ClaudeQuiet,
             },
             mem = new { totalMB = _totalMB, availMB = _availMB, byState = by },
             cpu = _cpuTotal,
@@ -1298,7 +1309,7 @@ internal sealed class Engine : IDisposable
         _thread.Join(3000);
         RestoreAll();
         // the power plan goes back too; ClaudeMode stays on in the settings, so it resumes at the next start
-        if (_claudeOn) { PowerPlan.Leave(_s); Native.SetThreadExecutionState(Native.ES_CONTINUOUS); }
+        if (_claudeOn) { PowerPlan.Leave(_s); QuietHours.Leave(_s); Native.SetThreadExecutionState(Native.ES_CONTINUOUS); }
         _s.Save();
         _gpu.Dispose();
     }

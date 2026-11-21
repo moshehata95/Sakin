@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 1.3.2 — 2026-11-22
+
+- Claude mode turns on Windows' **Do not disturb** (on by default, a switch in Settings) and puts back what you had
+  when it ends, on quit, after a crash and on uninstall. If you already had it on nothing changes, and a change you
+  make yourself while Claude mode is on is kept.
+
 ## 1.3.1 — 2026-11-21
 
 - *Support Sakin*: a quiet button in Settings › About and an item in the tray menu, opening PayPal. Sakin never

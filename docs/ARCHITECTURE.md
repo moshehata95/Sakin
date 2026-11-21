@@ -110,6 +110,13 @@ the settings before switching. Turning Claude mode off, quitting, the next start
 switch back to that plan and delete the copy. `powercfg` does all of this without administrator rights. The engine
 thread also holds `ES_SYSTEM_REQUIRED`.
 
+**Do not disturb.** `QuietHours` uses the same object as the Settings app (`QuietHoursSettings`,
+`IQuietHoursSettings::put_UserSelectedProfile`) on a short-lived STA thread. Entering sets
+`Microsoft.QuietHoursProfile.PriorityOnly` unless the user already has PriorityOnly or AlarmsOnly; the previous
+profile and the one Sakin set are stored in the settings. Leaving restores the previous profile only if the current
+one is still the one Sakin set, so a change the user made meanwhile is kept. (Writing the WNF state
+`WNF_SHEL_QUIETHOURS_ACTIVE_PROFILE_CHANGED` directly changes the value but the shell ignores it, so it isn't used.)
+
 ## Starting with Windows
 
 - Default: `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`, refreshed on every start so it follows the exe if moved.

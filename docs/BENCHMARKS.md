@@ -101,6 +101,10 @@ Recovery, tested separately: Sakin quit with Claude mode on puts High performanc
 on again at the next start. Killed with Claude mode on, the plan stays until the next start, which carries on
 and still restores High performance when Claude mode is turned off.
 
+Do not disturb, tested on the same machine: off before → on during Claude mode → off after. Already on before →
+left on, and still on after. Turned off by hand during Claude mode → left off after. Sakin killed while on →
+the next start restores it when Claude mode ends.
+
 Found by this test: on Modern Standby laptops Windows hides *High performance* from `powercfg /list` while
 another plan is active, but still switches to it. The first build checked the list, didn't find the plan, and
 fell back to Balanced. It now switches to the old plan first and only falls back if that fails.

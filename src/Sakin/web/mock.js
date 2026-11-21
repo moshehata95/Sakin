@@ -9,7 +9,7 @@
   let mode = "balanced", paused = false, pausedUntil = null, logId = 9;
   const settings = { graceSec: 30, dormantMin: 10, trimBelowPct: 20, busyCpuPct: 6, busyGpuPct: 15,
     startWithWindows: true, elevated: false, respectAudio: true, batteryBoost: true,
-    lang: new URLSearchParams(location.search).get("lang") || "en", claudeLingerMin: 5, claudeScreenOffMin: 2, claudeCool: true };
+    lang: new URLSearchParams(location.search).get("lang") || "en", claudeLingerMin: 5, claudeScreenOffMin: 2, claudeCool: true, claudeQuiet: true };
   let claudeOn = !!new URLSearchParams(location.search).get("claude");
   const apps = [
     { key: "chrome", name: "Google Chrome", state: "fg", ramMB: 1840, cpu: 4.2, rule: "auto" },

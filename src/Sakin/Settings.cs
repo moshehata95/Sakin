@@ -26,6 +26,9 @@ internal sealed class Settings
     public int ClaudeScreenOffMin { get; set; } = 2;
     public bool ClaudeCool { get; set; } = true;        // CPU without turbo: cooler and quieter for days
     public List<string> ClaudeApps { get; set; } = new() { "chrome", "illustrator", "photoshop", "adobe premiere pro", "afterfx", "powerpnt", "winword", "excel" };
+    public bool ClaudeQuiet { get; set; } = true;       // Do not disturb while Claude mode is on
+    public string ClaudePrevQuiet { get; set; } = "";   // the Do-not-disturb profile to go back to
+    public string ClaudeQuietSet { get; set; } = "";    // the profile we set ("" = we didn't change it)
     public string ClaudeScheme { get; set; } = "";      // our power plan while Claude mode is on
     public string ClaudePrevScheme { get; set; } = "";  // the plan to go back to
 
