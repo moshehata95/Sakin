@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 1.5.2 — 2026-11-22
+
+- Right-click a folder › **Open in Claude Code** starts a new Claude Code session on it in the Claude app. Added
+  on install when the Claude app is there (and at each start, in case it's installed later); removed on uninstall.
+
 ## 1.5.1 — 2026-11-22
 
 - The **Session Call** folder now comes with Sakin: it is made on the first start (`%USERPROFILE%\Session Call`)

@@ -55,6 +55,49 @@ internal static class SessionCall
         catch { return false; }
     }
 
+    static readonly string[] MenuKeys =
+    {
+        @"Software\Classes\Directory\shell\OpenInClaude",            // right-click on a folder
+        @"Software\Classes\Directory\Background\shell\OpenInClaude", // right-click inside a folder
+    };
+
+    [System.Runtime.InteropServices.DllImport("shell32.dll")]
+    static extern void SHChangeNotify(int eventId, uint flags, IntPtr item1, IntPtr item2);
+
+    /// <summary>
+    /// "Open in Claude Code" on a folder's right-click menu: opens a new session on that folder in the Claude app
+    /// (its claude://code/new?folder= link). Added only when the Claude app is installed; refreshed at every start,
+    /// because the app's path, and so the icon, changes with each of its updates.
+    /// </summary>
+    public static void EnsureMenu()
+    {
+        try
+        {
+            string? cmd = Microsoft.Win32.Registry.ClassesRoot.OpenSubKey(@"claude\shell\open\command")?.GetValue("") as string;
+            if (string.IsNullOrWhiteSpace(cmd)) return;   // no Claude app: nothing to open
+            string icon = cmd.StartsWith('"') ? cmd[1..cmd.IndexOf('"', 1)] : cmd.Split(' ')[0];
+            bool changed = false;
+            for (int i = 0; i < MenuKeys.Length; i++)
+            {
+                string arg = i == 0 ? "%1" : "%V";
+                string command = $"rundll32.exe url.dll,FileProtocolHandler \"claude://code/new?folder={arg}\"";
+                using var k = Microsoft.Win32.Registry.CurrentUser.CreateSubKey(MenuKeys[i]);
+                using var c = k.CreateSubKey("command");
+                if (k.GetValue("") as string != "Open in Claude Code") { k.SetValue("", "Open in Claude Code"); changed = true; }
+                if (k.GetValue("Icon") as string != icon) { k.SetValue("Icon", icon); changed = true; }
+                if (c.GetValue("") as string != command) { c.SetValue("", command); changed = true; }
+            }
+            if (changed) SHChangeNotify(0x08000000, 0, IntPtr.Zero, IntPtr.Zero); // SHCNE_ASSOCCHANGED: Explorer re-reads menus
+        }
+        catch { }
+    }
+
+    public static void RemoveMenu()
+    {
+        foreach (var key in MenuKeys) try { Microsoft.Win32.Registry.CurrentUser.DeleteSubKeyTree(key, false); } catch { }
+        try { SHChangeNotify(0x08000000, 0, IntPtr.Zero, IntPtr.Zero); } catch { }
+    }
+
     public static void OpenFolder(Settings s)
     {
         try

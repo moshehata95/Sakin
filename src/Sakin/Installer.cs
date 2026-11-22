@@ -43,6 +43,7 @@ internal static class Installer
 
             CreateShortcut();
             Register();
+            SessionCall.EnsureMenu();
 
             // the elevated scheduled task (if used) must point at the new location; this asks UAC once
             var s = Settings.Load();
@@ -129,6 +130,7 @@ internal static class Installer
         if (Startup.TaskExists()) Startup.RemoveTask();
         try { File.Delete(Shortcut); } catch { }
         try { Registry.CurrentUser.DeleteSubKeyTree(UninstallKey, false); } catch { }
+        SessionCall.RemoveMenu();
 
         // 3. settings, journal and the window's web cache
         try { Directory.Delete(Settings.Dir, true); } catch { }

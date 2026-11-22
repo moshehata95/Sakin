@@ -59,6 +59,7 @@ internal static class Program
 
         // the Session Call folder ships with Sakin: made on the first start and kept current
         if (SessionCall.Ensure(settings) && !firstRun) settings.Save();
+        SessionCall.EnsureMenu();   // "Open in Claude Code" on folders, when the Claude app is installed
         if (firstRun) settings.Save();
         // keep the startup entry pointing at this exe, wherever it has been moved to
         if (!settings.Elevated) Startup.SetRunKey(settings.StartWithWindows);
