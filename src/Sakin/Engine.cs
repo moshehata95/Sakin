@@ -21,7 +21,7 @@ namespace Sakin;
 /// Every change is journaled with the original values and undone on exit, on pause,
 /// on crash recovery, and the moment the app comes back to the front.
 /// </summary>
-internal sealed class Engine : IDisposable
+internal sealed partial class Engine : IDisposable
 {
     // ---------- tuning that is not exposed (kept deliberately conservative) ----------
     const double ManagedWithoutWindowMB = 300;  // windowless processes this big are managed too
@@ -429,7 +429,7 @@ internal sealed class Engine : IDisposable
             if (_boostKey != null) { PinBoosted(ms); FreeForBoost(now); }
             else
             {
-                if (_claudeOn) FreeForClaude(now);
+                if (_claudeOn) { FreeForClaude(now); UpdateAsks(now, ms); }
                 TrimIfShort(now);
             }
         }
@@ -530,6 +530,7 @@ internal sealed class Engine : IDisposable
     void MarkClaudeUsed(Group g, long now)
     {
         if (g.Guard || g.Key == "sakin") return;
+        if (!_claudeUsedAt.TryGetValue(g.Key, out long last) || now - last > 30_000) { _usedDirty = true; NoteUsedBy(g, now); }
         _claudeUsedAt[g.Key] = now;
     }
 
@@ -743,6 +744,8 @@ internal sealed class Engine : IDisposable
             _claudeFreedMB = 0;
             _sessionsFreedMB = 0;
             _claudeUsedAt.Clear();
+            RestoreUsed(now);
+            _asksLoaded = false;
             _s.ClaudeMode = true;
             _claudePlanError = PowerPlan.Enter(_s) ?? "";
             if (_s.ClaudeQuiet) QuietHours.Enter(_s);
@@ -756,6 +759,7 @@ internal sealed class Engine : IDisposable
             ClaudeOn = false;
             ClaudeBusy = false;
             _s.ClaudeMode = false;
+            ClearAsks();
             PowerPlan.Leave(_s);
             QuietHours.Leave(_s);
             _s.Save();

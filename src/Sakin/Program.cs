@@ -17,6 +17,8 @@ internal static class Program
         bool tray = args.Contains("--tray");
         using var quitSignal = new EventWaitHandle(false, EventResetMode.ManualReset, @"Local\Sakin.Quit");
         if (args.Contains("--quit")) { quitSignal.Set(); return 0; }   // clean exit of the running copy
+        // Sakin.exe --answer <id> asked|keep|done|notmine [note]: Claude's reply to a question in claude-asks.json
+        if (args.Contains("--answer")) return ClaudeAsks.AnswerFromCommandLine(args);
         using var claudeOnSignal = new EventWaitHandle(false, EventResetMode.AutoReset, @"Local\Sakin.ClaudeOn");
         using var claudeOffSignal = new EventWaitHandle(false, EventResetMode.AutoReset, @"Local\Sakin.ClaudeOff");
         // Sakin.exe --claude-mode on|off: lets a script (or Claude itself) switch Claude mode on the running copy

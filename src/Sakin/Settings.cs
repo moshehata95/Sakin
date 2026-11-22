@@ -29,6 +29,10 @@ internal sealed class Settings
     public int ClaudeSessionRestMin { get; set; } = 15; // a Claude session with nothing to do this long goes to sleep (0 = never)
     // sessions whose folder has one of these names are never put to sleep: the one you reach the others from
     public List<string> ClaudeKeepFolders { get; set; } = new() { "Session Call" };
+    // an app Claude opened and then left alone this long, still holding this much memory, is put to Claude as a question
+    public int ClaudeAskAfterMin { get; set; } = 30;    // 0 = never ask
+    public int ClaudeAskMinMB { get; set; } = 500;
+    public int ClaudeAskAgainMin { get; set; } = 60;    // after "still needed", or no answer, ask again this much later
     public bool ClaudeQuiet { get; set; } = true;       // Do not disturb while Claude mode is on
     public string ClaudePrevQuiet { get; set; } = "";   // the Do-not-disturb profile to go back to
     public string ClaudeQuietSet { get; set; } = "";    // the profile we set ("" = we didn't change it)
@@ -67,6 +71,9 @@ internal sealed class Settings
         ClaudeApps ??= new();
         ClaudeSessionRestMin = Math.Clamp(ClaudeSessionRestMin, 0, 240);
         ClaudeKeepFolders ??= new();
+        ClaudeAskAfterMin = Math.Clamp(ClaudeAskAfterMin, 0, 24 * 60);
+        ClaudeAskMinMB = Math.Clamp(ClaudeAskMinMB, 50, 64 * 1024);
+        ClaudeAskAgainMin = Math.Clamp(ClaudeAskAgainMin, 10, 24 * 60);
     }
 
     // ---------------- persistence ----------------

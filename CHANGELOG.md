@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+## 1.5.0 — 2026-11-22
+
+- **Claude mode asks Claude.** When an app Claude opened (Photoshop, Premiere, a browser…) has gone unused for
+  30 minutes and still holds 500 MB or more, Sakin doesn't guess: it writes a question to `claude-asks.json`. A
+  Claude session in a *Session Call* folder passes it to the session that opened the app, which either keeps it
+  (`Sakin.exe --answer <id> keep "why"`, asked again an hour later) or saves its work, closes the app and answers
+  `done`. Sakin itself never closes anything.
+- What Claude used is remembered across restarts of Sakin (for a day), so a question can still be asked.
+- Tested on a real case: Photoshop holding 7.9 GB with an unsaved document. The question reached the session that
+  opened it, which answered *keep* on its own (an export you had stopped, so the decision is yours).
+
 ## 1.4.0 — 2026-11-22
 
 - **Claude mode: idle sessions rest.** Each open Claude Code session (its `claude.exe`, MCP servers and tools) is

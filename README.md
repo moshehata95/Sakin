@@ -131,6 +131,11 @@ What runs:
   Settings) sleeps with all its tools and hands its RAM back; it wakes by itself the moment it gets work, from you,
   your phone or another session. The Claude app itself is never touched, so Remote Control keeps working.
   Sessions in a folder named **Session Call** never rest: open one there and use it to reach the others.
+- **Apps Claude opened and forgot are put to Claude as a question.** Sakin isn't smart and doesn't pretend to be:
+  when an app Claude opened has gone unused for 30 minutes and still holds 500 MB or more, it writes a question to
+  `%LOCALAPPDATA%\Sakin\claude-asks.json`. The Session Call session passes it to the session that opened the app,
+  which answers with `Sakin.exe --answer <id> keep|done|notmine "note"`. If the app is no longer needed, that
+  session saves the work and closes it; Sakin never closes anything itself.
 - **Apps Claude is using.** An app wakes up the moment Claude has a live local connection to it (an MCP bridge
   inside Premiere, a local server, a debugging port), or when an app on the *Claude uses this app* list starts
   working (Illustrator or Photoshop driven by script, Chrome through Claude's extension). It stays awake for
