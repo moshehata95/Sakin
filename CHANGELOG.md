@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 1.3.7 — 2026-11-22
+
+- The heart in the top bar now reads *Donate*.
+
 ## 1.3.6 — 2026-11-22
 
 - A small heart next to Settings in the top bar opens *Support Sakin*. Header icons now show their name on hover.
