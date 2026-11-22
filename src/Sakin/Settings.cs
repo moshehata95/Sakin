@@ -26,6 +26,9 @@ internal sealed class Settings
     public int ClaudeScreenOffMin { get; set; } = 2;
     public bool ClaudeCool { get; set; } = true;        // CPU without turbo: cooler and quieter for days
     public List<string> ClaudeApps { get; set; } = new() { "chrome", "msedge", "illustrator", "photoshop", "adobe premiere pro", "afterfx", "powerpnt", "winword", "excel" };
+    public int ClaudeSessionRestMin { get; set; } = 15; // a Claude session with nothing to do this long goes to sleep (0 = never)
+    // sessions whose folder has one of these names are never put to sleep: the one you reach the others from
+    public List<string> ClaudeKeepFolders { get; set; } = new() { "Session Call" };
     public bool ClaudeQuiet { get; set; } = true;       // Do not disturb while Claude mode is on
     public string ClaudePrevQuiet { get; set; } = "";   // the Do-not-disturb profile to go back to
     public string ClaudeQuietSet { get; set; } = "";    // the profile we set ("" = we didn't change it)
@@ -62,6 +65,8 @@ internal sealed class Settings
         ClaudeLingerMin = Math.Clamp(ClaudeLingerMin, 1, 60);
         ClaudeScreenOffMin = Math.Clamp(ClaudeScreenOffMin, 1, 60);
         ClaudeApps ??= new();
+        ClaudeSessionRestMin = Math.Clamp(ClaudeSessionRestMin, 0, 240);
+        ClaudeKeepFolders ??= new();
     }
 
     // ---------------- persistence ----------------

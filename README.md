@@ -126,6 +126,11 @@ What runs:
 
 - **Claude itself and everything it starts** (its sessions, MCP servers, builds, `git`, `ffmpeg`, a headless browser)
   runs normally. Sakin follows the process tree from every `claude.exe`, so nothing needs to be listed.
+- **Claude sessions with nothing to do rest.** Every open conversation keeps a `claude.exe` and its MCP servers
+  alive, and a dozen idle ones can hold gigabytes. A session that has done nothing for 15 minutes (adjustable in
+  Settings) sleeps with all its tools and hands its RAM back; it wakes by itself the moment it gets work, from you,
+  your phone or another session. The Claude app itself is never touched, so Remote Control keeps working.
+  Sessions in a folder named **Session Call** never rest: open one there and use it to reach the others.
 - **Apps Claude is using.** An app wakes up the moment Claude has a live local connection to it (an MCP bridge
   inside Premiere, a local server, a debugging port), or when an app on the *Claude uses this app* list starts
   working (Illustrator or Photoshop driven by script, Chrome through Claude's extension). It stays awake for

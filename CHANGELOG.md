@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+## 1.4.0 — 2026-11-22
+
+- **Claude mode: idle sessions rest.** Each open Claude Code session (its `claude.exe`, MCP servers and tools) is
+  watched on its own. After 15 minutes with nothing to do (*Put a Claude session with nothing to do to sleep after*
+  in Settings, 0 turns it off) it sleeps and hands its RAM back, and it wakes the moment it works again. The Claude
+  app itself, and so Remote Control, is never touched. Tested on 13 open sessions: 11 rested within a minute and
+  handed back about 1.2 GB; each woke on its own when it got work.
+- Sessions in a folder named *Session Call* never rest, so one session can always be reached (from the phone, for
+  example) to wake the others.
+
 ## 1.3.7 — 2026-11-22
 
 - The heart in the top bar now reads *Donate*.

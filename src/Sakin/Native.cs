@@ -229,6 +229,34 @@ internal static class Native
     // Never turn the display off with SC_MONITORPOWER: on Modern Standby laptops Windows treats it like the
     // power button and puts the PC into standby, which suspends Claude. Only the plan's screen timeout is used.
 
+    // ---------------- command lines ----------------
+    [DllImport("ntdll.dll")]
+    static extern int NtQueryInformationProcess(IntPtr h, int cls, IntPtr buf, int len, out int ret);
+    [StructLayout(LayoutKind.Sequential)]
+    struct UNICODE_STRING { public ushort Length, MaximumLength; public IntPtr Buffer; }
+    const int ProcessCommandLineInformation = 60;
+
+    /// <summary>A process's command line (needs only limited query rights), or null.</summary>
+    public static string? CommandLine(int pid)
+    {
+        IntPtr h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid);
+        if (h == IntPtr.Zero) return null;
+        try
+        {
+            NtQueryInformationProcess(h, ProcessCommandLineInformation, IntPtr.Zero, 0, out int len);
+            if (len <= 0 || len > 1 << 20) len = 65536;
+            IntPtr buf = Marshal.AllocHGlobal(len);
+            try
+            {
+                if (NtQueryInformationProcess(h, ProcessCommandLineInformation, buf, len, out _) != 0) return null;
+                var us = Marshal.PtrToStructure<UNICODE_STRING>(buf);
+                return us.Buffer == IntPtr.Zero ? "" : Marshal.PtrToStringUni(us.Buffer, us.Length / 2);
+            }
+            finally { Marshal.FreeHGlobal(buf); }
+        }
+        finally { CloseHandle(h); }
+    }
+
     // ---------------- misc ----------------
     [DllImport("user32.dll")]
     public static extern bool DestroyIcon(IntPtr h);

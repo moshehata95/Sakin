@@ -174,6 +174,28 @@ internal sealed class Engine : IDisposable
     Dictionary<int, Group> _pidGroup = new();
     public event Action<bool>? ClaudeChanged;
 
+    // Each Claude Code session (one claude.exe per open conversation, plus its tools and MCP servers) is watched
+    // on its own: one with nothing to do for ClaudeSessionRestMin goes to sleep and hands its RAM back, and it
+    // wakes the moment it works again (a message from you, the phone, or another session). Sessions in a
+    // ClaudeKeepFolders folder never sleep. The Claude app itself (its window, Remote Control) is never touched.
+    sealed class ClaudeSession
+    {
+        public long Create, LastBusy, RestedAt;
+        public string Id = "";
+        public bool Keep, Resting, Resolved;
+        public double Cpu;   // % of one core, this tick
+        public readonly Queue<(long t, double c)> Samples = new();
+        public HashSet<int> Pids = new();
+    }
+    // An idle session ticks along at ~1% of one core with spikes to ~5%; one at work streams at 10% and up.
+    const double SessionBusyCore = 5.0;    // % of one core over 10 s: the session is doing something
+    const double SessionBurstCore = 25.0;  // % of one core in one second: wake now
+    const long SessionTrimSettleMs = 20_000;   // paging back in after a trim is not work
+    readonly Dictionary<int, ClaudeSession> _sessions = new();
+    readonly Dictionary<(int, long), string?> _cmdCache = new();
+    HashSet<int> _restingPids = new();
+    double _sessionsFreedMB;
+
     public bool Paused { get; private set; }
     long _pausedUntil; // unix ms, 0 = until resumed
     public volatile bool UiAttached;
@@ -283,6 +305,7 @@ internal sealed class Engine : IDisposable
         HashSet<Group>? newForClaude = null;
         foreach (var g in _groups.Values) { g.Procs.Clear(); g.PrivateMB = 0; g.Cpu = 0; g.Gpu = 0; g.Audio = false; g.HasClaude = false; }
         var seenCpu = new HashSet<(int, long)>();
+        var pidCpu = new Dictionary<int, double>();
         foreach (var r in rows)
         {
             if (r.SessionId != _session || r.Pid == 0 || self.Contains(r.Pid)) continue;
@@ -316,7 +339,7 @@ internal sealed class Engine : IDisposable
                 {
                     double pcpu = (r.CpuTime - prev) / 10_000.0 / elapsed / _cpus * 100.0;
                     g.Cpu += pcpu;
-                    if (isClaude) claudeCpu += pcpu;
+                    if (isClaude) { claudeCpu += pcpu; pidCpu[r.Pid] = pcpu; }
                 }
                 _prevCpu[id] = r.CpuTime;
             }
@@ -351,8 +374,10 @@ internal sealed class Engine : IDisposable
                         if (pidGroup.TryGetValue(ca ? b : a, out var used)) MarkClaudeUsed(used, now);
                     }
                 }
+                UpdateSessions(now, pidCpu);
             }
         }
+        else if (_sessions.Count > 0 || _restingPids.Count > 0) { _sessions.Clear(); _restingPids = new(); }
 
         // drop apps that closed; forget tweaks of dead processes
         // an app that vanishes for a moment keeps its history; it is forgotten after a minute
@@ -394,7 +419,9 @@ internal sealed class Engine : IDisposable
             if (prev != g.State) OnTransition(g, prev);
             int level = g.State switch { "calm" => 1, "sleep" => 2, "boost" => 3, _ => 0 };
             // Claude's own processes inside another app (its Chrome extension host, a session in a terminal) run normally
-            foreach (var p in g.Procs) Apply(p, level > 0 && _claudePids.Contains(p.Pid) ? 0 : level);
+            // ...except a session that is resting, which sleeps with all its tools
+            foreach (var p in g.Procs)
+                Apply(p, _restingPids.Contains(p.Pid) && g.Key != _boostKey ? 2 : level > 0 && _claudePids.Contains(p.Pid) ? 0 : level);
         }
 
         if (!fgOnly && !Paused)
@@ -525,6 +552,165 @@ internal sealed class Engine : IDisposable
         return set;
     }
 
+    static readonly HashSet<string> SessionParents = new(StringComparer.OrdinalIgnoreCase)
+    { "pwsh", "powershell", "cmd", "bash", "sh", "zsh", "fish", "node", "bun", "wsl", "nu" };
+    static readonly System.Text.RegularExpressions.Regex SessionIdRx =
+        new(@"--(?:resume|session-id)[= ]+""?([0-9a-fA-F-]{36})", System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    string? CachedCommandLine(ProcRow r)
+    {
+        var k = (r.Pid, r.CreateTime);
+        if (!_cmdCache.TryGetValue(k, out var c)) { c = Native.CommandLine(r.Pid); _cmdCache[k] = c; }
+        return c;
+    }
+
+    /// <summary>A Claude Code session process: the app runs it with stream-json; in a terminal its parent is a shell.</summary>
+    bool IsSessionRoot(ProcRow r)
+    {
+        if (r.Name != "claude") return false;
+        string? cmd = CachedCommandLine(r);
+        if (cmd == null || cmd.Contains("--type=")) return false;   // the app's own renderer/GPU/utility processes
+        if (cmd.Contains("--output-format")) return true;
+        return _byPid.TryGetValue(r.ParentPid, out var par) && SessionParents.Contains(par.Name);
+    }
+
+    /// <summary>Whether a session lives in a folder that must stay awake (its transcript sits under ~/.claude/projects/&lt;folder&gt;).</summary>
+    bool KeepAwake(string id)
+    {
+        if (id == "" || _s.ClaudeKeepFolders.Count == 0) return false;
+        try
+        {
+            string projects = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".claude", "projects");
+            foreach (var dir in Directory.EnumerateDirectories(projects))
+            {
+                if (!File.Exists(Path.Combine(dir, id + ".jsonl"))) continue;
+                string name = Path.GetFileName(dir);
+                // Claude Code names the folder after the session's path with every non-alphanumeric turned into '-'
+                foreach (var f in _s.ClaudeKeepFolders)
+                {
+                    string m = System.Text.RegularExpressions.Regex.Replace(f.Trim(), "[^A-Za-z0-9]", "-");
+                    if (m.Trim('-') == "") continue;
+                    if (name.Equals(m, StringComparison.OrdinalIgnoreCase) || name.EndsWith("-" + m.TrimStart('-'), StringComparison.OrdinalIgnoreCase)) return true;
+                }
+                return false;
+            }
+        }
+        catch { }
+        return false;
+    }
+
+    void UpdateSessions(long now, Dictionary<int, double> pidCpu)
+    {
+        var children = new Dictionary<int, List<int>>();
+        foreach (int pid in _claudePids)
+            if (_byPid.TryGetValue(pid, out var r) && _byPid.TryGetValue(r.ParentPid, out var par) && par.CreateTime <= r.CreateTime)
+                (children.TryGetValue(r.ParentPid, out var l) ? l : children[r.ParentPid] = new()).Add(pid);
+
+        var alive = new HashSet<int>();
+        foreach (int pid in _claudePids)
+        {
+            if (!_byPid.TryGetValue(pid, out var r) || !IsSessionRoot(r)) continue;
+            // a session started by another session's tools belongs to that one
+            if (_byPid.TryGetValue(r.ParentPid, out var par) && _claudePids.Contains(par.Pid) && par.Name != "claude" && IsInsideSession(par.Pid)) continue;
+            alive.Add(pid);
+            if (!_sessions.TryGetValue(pid, out var s) || s.Create != r.CreateTime)
+            {
+                s = new ClaudeSession { Create = r.CreateTime, LastBusy = now };
+                _sessions[pid] = s;
+            }
+            if (!s.Resolved)
+            {
+                s.Id = SessionIdRx.Match(CachedCommandLine(r) ?? "") is { Success: true } m ? m.Groups[1].Value.ToLowerInvariant() : "";
+                s.Keep = KeepAwake(s.Id);
+                s.Resolved = true;
+            }
+            // the session and everything under it
+            var set = new HashSet<int> { pid };
+            var stack = new Stack<int>(); stack.Push(pid);
+            while (stack.Count > 0)
+                if (children.TryGetValue(stack.Pop(), out var kids))
+                    foreach (int k in kids) if (set.Add(k)) stack.Push(k);
+            s.Pids = set;
+            s.Cpu = set.Sum(p => pidCpu.GetValueOrDefault(p)) * _cpus;
+            s.Samples.Enqueue((now, s.Cpu));
+            while (s.Samples.Count > 0 && now - s.Samples.Peek().t > 10_000) s.Samples.Dequeue();
+            double avg = s.Samples.Average(x => x.c);
+            bool settling = s.Resting && now - s.RestedAt < SessionTrimSettleMs;
+            if (!settling && (s.Cpu >= SessionBurstCore || (s.Samples.Count >= 5 && avg >= SessionBusyCore))) s.LastBusy = now;
+
+            bool rest = _s.ClaudeSessionRestMin > 0 && !s.Keep && now - s.LastBusy >= _s.ClaudeSessionRestMin * 60_000L;
+            if (rest && !s.Resting)
+            {
+                s.Resting = true;
+                s.RestedAt = now;
+                double freed = TrimPids(set, now);
+                _sessionsFreedMB += freed;
+                Log("trim", "sessionRest", "", freed, _s.ClaudeSessionRestMin.ToString());
+                SessionTrace($"rest pid={pid} id={s.Id} freed={freed:0}MB");
+            }
+            else if (!rest && s.Resting)
+            {
+                s.Resting = false;
+                Log("claude", "sessionWake", "", Math.Max(s.Cpu, avg));
+                SessionTrace($"wake pid={pid} id={s.Id} cpu={s.Cpu:0.0} avg10={avg:0.0}");
+            }
+        }
+        foreach (int dead in _sessions.Keys.Where(k => !alive.Contains(k)).ToList()) _sessions.Remove(dead);
+        foreach (var k in _cmdCache.Keys.Where(k => !_byPid.TryGetValue(k.Item1, out var r) || r.CreateTime != k.Item2).ToList()) _cmdCache.Remove(k);
+
+        var resting = new HashSet<int>();
+        foreach (var s in _sessions.Values) if (s.Resting) resting.UnionWith(s.Pids);
+        _restingPids = resting;
+    }
+
+    /// <summary>With a file named sessions-debug next to the settings, session sleep/wake goes to sessions.log.</summary>
+    static void SessionTrace(string line)
+    {
+        try
+        {
+            if (!File.Exists(Path.Combine(Settings.Dir, "sessions-debug"))) return;
+            File.AppendAllText(Path.Combine(Settings.Dir, "sessions.log"), $"{DateTime.Now:HH:mm:ss} {line}{Environment.NewLine}");
+        }
+        catch { }
+    }
+
+    bool IsInsideSession(int pid)
+    {
+        for (int i = 0; i < 64 && _byPid.TryGetValue(pid, out var r); i++)
+        {
+            if (r.Name == "claude" && IsSessionRoot(r)) return true;
+            if (!_byPid.TryGetValue(r.ParentPid, out var par) || par.CreateTime > r.CreateTime) return false;
+            pid = par.Pid;
+        }
+        return false;
+    }
+
+    /// <summary>Hand back the RAM of a set of processes; returns MB that left RAM.</summary>
+    double TrimPids(HashSet<int> pids, long now)
+    {
+        var rows = pids.Where(_byPid.ContainsKey).Select(p => _byPid[p]).ToList();
+        double before = rows.Sum(r => r.PrivateBytes) / 1048576.0;
+        foreach (var r in rows)
+        {
+            IntPtr h = Native.OpenProcess(Native.PROCESS_SET_QUOTA | Native.PROCESS_QUERY_LIMITED_INFORMATION, false, r.Pid);
+            if (h == IntPtr.Zero) continue;
+            Native.SetProcessWorkingSetSizeEx(h, (IntPtr)(-1), (IntPtr)(-1), 0);
+            Native.CloseHandle(h);
+        }
+        var ids = rows.Select(r => (r.Pid, r.CreateTime)).ToHashSet();
+        double after = ProcessTable.Read().Where(r => ids.Contains((r.Pid, r.CreateTime))).Sum(r => r.PrivateBytes) / 1048576.0;
+        double freed = Math.Max(0, before - after);
+        if (freed >= 1)
+        {
+            _trims.Add((now, freed));
+            while (_trims.Count > 0 && now - _trims[0].t > 600_000) _trims.RemoveAt(0);
+            RollStatsDay();
+            _s.ReclaimedTodayMB += freed;
+            _statsDirty = true;
+        }
+        return freed;
+    }
+
     /// <summary>On entering Claude mode, every quiet app that went to sleep hands its RAM back once, a few per second.</summary>
     void FreeForClaude(long now)
     {
@@ -555,6 +741,7 @@ internal sealed class Engine : IDisposable
             _claudeLastBusy = now;
             _claudeFirstPassDone = false;
             _claudeFreedMB = 0;
+            _sessionsFreedMB = 0;
             _claudeUsedAt.Clear();
             _s.ClaudeMode = true;
             _claudePlanError = PowerPlan.Enter(_s) ?? "";
@@ -972,9 +1159,11 @@ internal sealed class Engine : IDisposable
 
     public void SetNumber(string key, int value)
     {
-        if (key is "claudeLingerMin" or "claudeScreenOffMin")
+        if (key is "claudeLingerMin" or "claudeScreenOffMin" or "claudeSessionRestMin")
         {
-            if (key == "claudeLingerMin") _s.ClaudeLingerMin = value; else _s.ClaudeScreenOffMin = value;
+            if (key == "claudeLingerMin") _s.ClaudeLingerMin = value;
+            else if (key == "claudeSessionRestMin") _s.ClaudeSessionRestMin = value;
+            else _s.ClaudeScreenOffMin = value;
             _s.Clamp();
             _s.Save();
             if (_claudeOn && key == "claudeScreenOffMin") PowerPlan.Apply(_s);
@@ -1282,7 +1471,10 @@ internal sealed class Engine : IDisposable
                 ramMB = Math.Round(_groups.Values.Where(g => g.State == "claude").Sum(g => g.PrivateMB)),
                 asleep = _groups.Values.Count(g => g.State == "sleep" && g.Reason == "claude-away"),
                 using_ = _groups.Values.Count(g => g.State == "claude"),
-                freedMB = Math.Round(_claudeFreedMB),
+                freedMB = Math.Round(_claudeFreedMB + _sessionsFreedMB),
+                sessions = _sessions.Count,
+                sessionsResting = _sessions.Values.Count(s => s.Resting),
+                sessionsKept = _sessions.Values.Count(s => s.Keep),
                 present = _userPresent,
                 plan = _claudePlanError == "",
             },
@@ -1294,7 +1486,7 @@ internal sealed class Engine : IDisposable
                 busyCpuPct = _s.BusyCpuPct, busyGpuPct = _s.BusyGpuPct,
                 startWithWindows = _s.StartWithWindows, elevated = _s.Elevated,
                 respectAudio = _s.RespectAudio, batteryBoost = _s.BatteryBoost, lang = _s.Lang,
-                claudeLingerMin = _s.ClaudeLingerMin, claudeScreenOffMin = _s.ClaudeScreenOffMin, claudeCool = _s.ClaudeCool, claudeQuiet = _s.ClaudeQuiet,
+                claudeLingerMin = _s.ClaudeLingerMin, claudeScreenOffMin = _s.ClaudeScreenOffMin, claudeSessionRestMin = _s.ClaudeSessionRestMin, claudeCool = _s.ClaudeCool, claudeQuiet = _s.ClaudeQuiet,
             },
             mem = new { totalMB = _totalMB, availMB = _availMB, byState = by },
             cpu = _cpuTotal,

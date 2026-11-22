@@ -221,7 +221,7 @@
       $("#claudeTitle").innerHTML = iso(c.busy ? L.claudeBusy : L.claudeQuiet(L.ago(c.quietSec)));
       $("#claudeSub").textContent = iso(c.present ? L.claudePresent : L.claudeAway(S.settings.claudeScreenOffMin));
       $("#cbUsing").innerHTML = `${c.using_}<small> · ${L.size(c.ramMB)}</small>`;
-      $("#cbAsleep").textContent = c.asleep;
+      $("#cbAsleep").innerHTML = c.sessionsResting ? `${c.asleep}<small> · ${L.sessionsResting(c.sessionsResting)}</small>` : `${c.asleep}`;
       $("#cbFreed").innerHTML = sizeHtml(c.freedMB);
       if (!c.plan) $("#claudeSub").textContent = iso(L.claudeNoPlan);
 
