@@ -122,6 +122,57 @@ internal static class SessionCall
         try { SHChangeNotify(0x08000000, 0, IntPtr.Zero, IntPtr.Zero); } catch { }
     }
 
+    /// <summary>
+    /// The link that opens the Session Call session in the Claude app: the newest one, not archived, whose folder is
+    /// one of ClaudeKeepFolders (the app keeps a small JSON file per session). With none, a new session there.
+    /// </summary>
+    public static string SessionLink(Settings s)
+    {
+        string best = "";
+        long bestAt = -1;
+        try
+        {
+            string root = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Claude", "claude-code-sessions");
+            if (Directory.Exists(root))
+                foreach (var f in Directory.EnumerateFiles(root, "local_*.json", SearchOption.AllDirectories))
+                {
+                    try
+                    {
+                        using var doc = System.Text.Json.JsonDocument.Parse(File.ReadAllText(f));
+                        var j = doc.RootElement;
+                        if (j.TryGetProperty("isArchived", out var a) && a.ValueKind == System.Text.Json.JsonValueKind.True) continue;
+                        string cwd = j.TryGetProperty("cwd", out var c) ? c.GetString() ?? "" : "";
+                        if (!IsKeptFolder(s, cwd)) continue;
+                        long at = j.TryGetProperty("lastActivityAt", out var t) && t.TryGetInt64(out long v) ? v : 0;
+                        string id = j.TryGetProperty("sessionId", out var i) ? i.GetString() ?? "" : "";
+                        if (id.StartsWith("local_") && at > bestAt) { best = id; bestAt = at; }
+                    }
+                    catch { }
+                }
+        }
+        catch { }
+        return best != "" ? $"claude://claude.ai/epitaxy/{best}"
+            : $"claude://code/new?folder={Uri.EscapeDataString(Dir(s))}";
+    }
+
+    public static bool IsKeptFolder(Settings s, string dir)
+    {
+        dir = dir.Trim().TrimEnd('\\', '/');
+        if (dir == "") return false;
+        string name = Path.GetFileName(dir);
+        foreach (var f in s.ClaudeKeepFolders)
+        {
+            string k = f.Trim().TrimEnd('\\', '/');
+            if (k != "" && (k.Equals(name, StringComparison.OrdinalIgnoreCase) || k.Equals(dir, StringComparison.OrdinalIgnoreCase))) return true;
+        }
+        return false;
+    }
+
+    public static void OpenSession(Settings s)
+    {
+        try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(SessionLink(s)) { UseShellExecute = true }); } catch { }
+    }
+
     public static void OpenFolder(Settings s)
     {
         try

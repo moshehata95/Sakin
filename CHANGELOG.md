@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 1.5.4 — 2026-11-22
+
+- **Fix:** a session in a *Session Call* folder could still be put to rest. Sakin knew it only by the session id on
+  its command line, and a session the Claude app starts from a warm spare has none. It now also reads the session's
+  folder, and looks again every 30 seconds instead of once.
+- The Claude app doesn't reopen sessions after a restart, and nothing outside it can send one a message. In Claude
+  mode, when the app is running and no Session Call session is, Sakin says so once, and clicking the notice opens Session Call
+  (send it any message to start it). The tray menu has **Open Session Call** too.
+
 ## 1.5.3 — 2026-11-22
 
 - **Fix:** *Open in Claude Code* didn't appear: the Claude app registers `claude://` as a packaged (Store-style)

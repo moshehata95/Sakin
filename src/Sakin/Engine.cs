@@ -180,8 +180,8 @@ internal sealed partial class Engine : IDisposable
     // ClaudeKeepFolders folder never sleep. The Claude app itself (its window, Remote Control) is never touched.
     sealed class ClaudeSession
     {
-        public long Create, LastBusy, RestedAt;
-        public string Id = "";
+        public long Create, LastBusy, RestedAt, KeepCheckedAt;
+        public string Id = "", Dir = "";
         public bool Keep, Resting, Resolved;
         public double Cpu;   // % of one core, this tick
         public readonly Queue<(long t, double c)> Samples = new();
@@ -377,7 +377,7 @@ internal sealed partial class Engine : IDisposable
                 UpdateSessions(now, pidCpu);
             }
         }
-        else if (_sessions.Count > 0 || _restingPids.Count > 0) { _sessions.Clear(); _restingPids = new(); }
+        else if (_sessions.Count > 0 || _restingPids.Count > 0) { _sessions.Clear(); _restingPids = new(); KeptSessionAlive = false; }
 
         // drop apps that closed; forget tweaks of dead processes
         // an app that vanishes for a moment keeps its history; it is forgotten after a minute
@@ -600,6 +600,12 @@ internal sealed partial class Engine : IDisposable
         return false;
     }
 
+    /// <summary>A session's folder is one that must stay awake: its own name, or its full path, is in ClaudeKeepFolders.</summary>
+    bool KeepFolder(string dir) => SessionCall.IsKeptFolder(_s, dir);
+
+    /// <summary>Whether a session in a kept folder (Session Call) is running now.</summary>
+    public bool KeptSessionAlive { get; private set; }
+
     void UpdateSessions(long now, Dictionary<int, double> pidCpu)
     {
         var children = new Dictionary<int, List<int>>();
@@ -622,8 +628,16 @@ internal sealed partial class Engine : IDisposable
             if (!s.Resolved)
             {
                 s.Id = SessionIdRx.Match(CachedCommandLine(r) ?? "") is { Success: true } m ? m.Groups[1].Value.ToLowerInvariant() : "";
-                s.Keep = KeepAwake(s.Id);
                 s.Resolved = true;
+            }
+            // looked at again every 30 s: a new session has no transcript yet, and one started from a warm spare
+            // has no id on its command line, so its folder is the other way to know it
+            if (!s.Keep && now - s.KeepCheckedAt >= 30_000)
+            {
+                s.KeepCheckedAt = now;
+                s.Dir = Native.CurrentDirectory(pid) ?? s.Dir;
+                s.Keep = KeepFolder(s.Dir) || KeepAwake(s.Id);
+                if (s.Keep) SessionTrace($"keep pid={pid} id={s.Id} dir={s.Dir}");
             }
             // the session and everything under it
             var set = new HashSet<int> { pid };
@@ -662,6 +676,7 @@ internal sealed partial class Engine : IDisposable
         var resting = new HashSet<int>();
         foreach (var s in _sessions.Values) if (s.Resting) resting.UnionWith(s.Pids);
         _restingPids = resting;
+        KeptSessionAlive = _sessions.Values.Any(s => s.Keep);
     }
 
     /// <summary>With a file named sessions-debug next to the settings, session sleep/wake goes to sessions.log.</summary>

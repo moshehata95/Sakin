@@ -50,12 +50,53 @@ internal sealed class TrayApp : ApplicationContext
         _hook = Native.SetWinEventHook(Native.EVENT_SYSTEM_FOREGROUND, Native.EVENT_SYSTEM_FOREGROUND, IntPtr.Zero,
             _hookProc, 0, 0, Native.WINEVENT_OUTOFCONTEXT);
 
+        _tray.BalloonTipClicked += (_, _) => { var a = _balloonClick; _balloonClick = null; a?.Invoke(); };
+        _tray.BalloonTipClosed += (_, _) => _balloonClick = null;
+
         _timer = new System.Windows.Forms.Timer { Interval = 3000 };
-        _timer.Tick += (_, _) => RefreshTray();
+        _timer.Tick += (_, _) => { RefreshTray(); CheckSessionCall(); };
         _timer.Start();
 
         Microsoft.Win32.SystemEvents.SessionEnding += (_, _) => Exit();
         if (showWindow) ShowWindow();
+    }
+
+    // ---------------- Session Call ----------------
+    Action? _balloonClick;
+    int _scTick;
+    long _claudeUpSince;   // when the Claude app was first seen running, 0 = not running
+    bool _scWarned;
+
+    /// <summary>
+    /// The Claude app doesn't bring sessions back after a restart, and nothing outside it can send a session a
+    /// message. So when the app has been up a while and no session in a kept folder is running, say so once, and a
+    /// click opens Session Call (sending it any message starts it again).
+    /// </summary>
+    void CheckSessionCall()
+    {
+        if (++_scTick % 5 != 0) return;   // every 15 s
+        long now = Environment.TickCount64;
+        // sessions are watched only in Claude mode, and Session Call's job belongs to it
+        if (_s.ClaudeKeepFolders.Count == 0 || !_engine.ClaudeOn || !ClaudeAppRunning()) { _claudeUpSince = 0; _scWarned = false; return; }
+        if (_claudeUpSince == 0) _claudeUpSince = now;
+        if (_engine.KeptSessionAlive) { _scWarned = false; return; }
+        if (_scWarned || now - _claudeUpSince < 90_000) return;
+        _scWarned = true;
+        _balloonClick = () => SessionCall.OpenSession(_s);
+        _tray.ShowBalloonTip(10_000, "Sakin", T(
+            "Session Call isn't running (the Claude app doesn't reopen it after a restart). Click here to open it, then send it any message.",
+            "سيشن Session Call مقفولة (برنامج Claude مش بيفتحها لوحده بعد الريستارت). دوس هنا تفتحها، وابعتلها أي رسالة."), ToolTipIcon.None);
+    }
+
+    static bool ClaudeAppRunning()
+    {
+        foreach (var p in System.Diagnostics.Process.GetProcessesByName("claude"))
+            using (p)
+            {
+                string? cmd = Native.CommandLine(p.Id);
+                if (cmd != null && !cmd.Contains("--type=") && cmd.Contains(@"\app\Claude.exe", StringComparison.OrdinalIgnoreCase)) return true;
+            }
+        return false;
     }
 
     // ---------------- tray ----------------
@@ -117,6 +158,7 @@ internal sealed class TrayApp : ApplicationContext
             T("Leave the PC running for Claude: only Claude and the apps it uses stay awake.", "سيب الجهاز شغال لـ Claude: هو والبرامج اللي بيستخدمها بس اللي صاحيين.") };
         claude.Click += (_, _) => _engine.Post(() => _engine.SetClaudeMode(!claudeOn));
         menu.Items.Add(claude);
+        menu.Items.Add(new ToolStripMenuItem(T("Open Session Call", "افتح Session Call"), null, (_, _) => SessionCall.OpenSession(_s)));
         menu.Items.Add(new ToolStripSeparator());
 
         var modes = new ToolStripMenuItem(T("Intensity", "الشدة"));

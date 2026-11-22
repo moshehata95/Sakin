@@ -257,6 +257,41 @@ internal static class Native
         finally { CloseHandle(h); }
     }
 
+    [DllImport("kernel32.dll", SetLastError = true)]
+    static extern bool ReadProcessMemory(IntPtr h, IntPtr addr, byte[] buf, int size, out IntPtr read);
+    [StructLayout(LayoutKind.Sequential)]
+    struct PROCESS_BASIC_INFORMATION { public IntPtr Reserved1, PebBaseAddress, Reserved2a, Reserved2b, UniqueProcessId, Reserved3; }
+
+    /// <summary>
+    /// A 64-bit process's current folder, read from its PEB (ProcessParameters at +0x20, CurrentDirectory at +0x38),
+    /// or null. A Claude Code session started from a warm spare has no session id on its command line; its folder
+    /// is the only thing that says which session it is.
+    /// </summary>
+    public static string? CurrentDirectory(int pid)
+    {
+        if (IntPtr.Size != 8) return null;
+        IntPtr h = OpenProcess(0x0400 /* QUERY_INFORMATION */ | 0x0010 /* VM_READ */, false, pid);
+        if (h == IntPtr.Zero) return null;
+        IntPtr pbi = Marshal.AllocHGlobal(Marshal.SizeOf<PROCESS_BASIC_INFORMATION>());
+        try
+        {
+            if (NtQueryInformationProcess(h, 0, pbi, Marshal.SizeOf<PROCESS_BASIC_INFORMATION>(), out _) != 0) return null;
+            IntPtr peb = Marshal.PtrToStructure<PROCESS_BASIC_INFORMATION>(pbi).PebBaseAddress;
+            var b = new byte[16];
+            if (!ReadProcessMemory(h, peb + 0x20, b, 8, out _)) return null;
+            var pp = (IntPtr)BitConverter.ToInt64(b, 0);
+            if (!ReadProcessMemory(h, pp + 0x38, b, 16, out _)) return null;
+            int len = BitConverter.ToUInt16(b, 0);
+            var buf = (IntPtr)BitConverter.ToInt64(b, 8);
+            if (len <= 0 || len > 4096) return null;
+            var s = new byte[len];
+            if (!ReadProcessMemory(h, buf, s, len, out _)) return null;
+            return System.Text.Encoding.Unicode.GetString(s).TrimEnd('\\');
+        }
+        catch { return null; }
+        finally { Marshal.FreeHGlobal(pbi); CloseHandle(h); }
+    }
+
     // ---------------- misc ----------------
     [DllImport("user32.dll")]
     public static extern bool DestroyIcon(IntPtr h);
