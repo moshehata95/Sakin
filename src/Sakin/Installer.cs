@@ -123,6 +123,8 @@ internal static class Installer
         // if it couldn't put the power plan back itself (crash, killed), do it here
         var left = Settings.Load();
         PowerPlan.Leave(left);
+        left.ClaudeMode = false;
+        PowerPlan.Tidy(left);
         QuietHours.Leave(left);
 
         // 2. startup, shortcut, Installed-apps entry

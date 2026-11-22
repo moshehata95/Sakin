@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 1.5.5 — 2026-11-22
+
+- **Fix:** a "Sakin - Claude mode" power plan the settings didn't know about (made by another copy of Sakin) stayed
+  active after Claude mode ended. With Claude mode off, Sakin now finds such plans by name, puts Balanced back if
+  one is active, and deletes them. Also on uninstall.
+
 ## 1.5.4 — 2026-11-22
 
 - **Fix:** a session in a *Session Call* folder could still be put to rest. Sakin knew it only by the session id on

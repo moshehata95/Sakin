@@ -224,6 +224,7 @@ internal sealed partial class Engine : IDisposable
         else
         {
             if (_s.ClaudeScheme != "") PowerPlan.Leave(_s);                   // left over from a crash
+            PowerPlan.Tidy(_s);                                               // or one these settings never knew
             if (_s.ClaudeQuietSet != "") { QuietHours.Leave(_s); _s.Save(); }
         }
         _thread.Start();
@@ -776,6 +777,7 @@ internal sealed partial class Engine : IDisposable
             _s.ClaudeMode = false;
             ClearAsks();
             PowerPlan.Leave(_s);
+            PowerPlan.Tidy(_s);
             QuietHours.Leave(_s);
             _s.Save();
             Native.SetThreadExecutionState(Native.ES_CONTINUOUS);

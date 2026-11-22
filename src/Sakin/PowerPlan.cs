@@ -87,6 +87,34 @@ internal static class PowerPlan
         catch { }
     }
 
+    /// <summary>
+    /// Claude mode is off: no "Sakin - Claude mode" plan should be left. One the settings don't know (made by another
+    /// copy of Sakin, or before a crash lost the settings) is found by its name: if it is the active plan, Balanced
+    /// comes back first, then the copy is deleted.
+    /// </summary>
+    public static void Tidy(Settings s)
+    {
+        try
+        {
+            if (s.ClaudeMode) return;
+            var ours = new List<string>();
+            foreach (string line in Run("/list").Split('\n'))
+            {
+                var m = Guid.Match(line);
+                if (m.Success && line.Contains("(" + Name + ")", StringComparison.OrdinalIgnoreCase)) ours.Add(m.Value);
+            }
+            if (ours.Count == 0) return;
+            string? active = Active();
+            if (active != null && ours.Contains(active, StringComparer.OrdinalIgnoreCase))
+            {
+                Run("/setactive " + Balanced);
+                if (ours.Contains(Active() ?? "", StringComparer.OrdinalIgnoreCase)) return;   // couldn't switch away: keep it
+            }
+            foreach (string g in ours) Run("/delete " + g);
+        }
+        catch { }
+    }
+
     public static string? Active()
     {
         var m = Guid.Match(Run("/getactivescheme"));
