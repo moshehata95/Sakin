@@ -165,6 +165,9 @@ svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width:
 .support-text { flex: 1; margin: 0; color: var(--ink-2); font-size: 12.5px; line-height: 1.6; }
 .support .btn-line { white-space: nowrap; }
 .support .btn-line svg { color: var(--s-fg); }
+/* support: a quiet heart in the bar, warm on hover */
+.heart-btn svg { color: var(--s-fg); opacity: .75; transition: opacity .15s, transform .2s; }
+.heart-btn:hover svg { opacity: 1; fill: color-mix(in srgb, var(--s-fg) 22%, transparent); transform: scale(1.08); }
 /* the Claude mode button carries its own light, so on/off is clear at a glance */
 #claudeBtn { gap: 8px; }
 .claude-led { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--ink-3); opacity: .55; }

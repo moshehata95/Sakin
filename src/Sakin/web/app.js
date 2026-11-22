@@ -38,7 +38,7 @@
       const v = L[el.dataset.t];
       if (typeof v === "string") el.textContent = iso(v);
     }
-    for (const el of document.querySelectorAll("[data-t-aria]")) el.setAttribute("aria-label", L[el.dataset.tAria]);
+    for (const el of document.querySelectorAll("[data-t-aria]")) { el.setAttribute("aria-label", L[el.dataset.tAria]); el.title = L[el.dataset.tAria]; }
     $(".about").textContent = L.about;
     $("#ticks").dataset.n = "";
     lastLogId = -1;
@@ -262,6 +262,7 @@
   $("#claudeBtn").addEventListener("click", () => send("claude", { on: !(S && S.claude) }));
   $("#claudeStop").addEventListener("click", () => send("claude", { on: false }));
   $("#donateBtn").addEventListener("click", () => send("donate"));
+  $("#donateTop").addEventListener("click", () => send("donate"));
 
   $("#tabs").addEventListener("click", (e) => {
     const b = e.target.closest("button[data-f]");
