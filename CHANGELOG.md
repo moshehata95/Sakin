@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 1.3.5 — 2026-11-22
+
+- The Claude mode button shows whether it's on: a small green light and *On*, or a grey light and *Off*.
+
 ## 1.3.4 — 2026-11-22
 
 - **Fix:** Windows no longer turns the display off in Claude mode. On Modern Standby laptops that is standby itself
