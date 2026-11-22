@@ -130,7 +130,9 @@ What runs:
   alive, and a dozen idle ones can hold gigabytes. A session that has done nothing for 15 minutes (adjustable in
   Settings) sleeps with all its tools and hands its RAM back; it wakes by itself the moment it gets work, from you,
   your phone or another session. The Claude app itself is never touched, so Remote Control keeps working.
-  Sessions in a folder named **Session Call** never rest: open one there and use it to reach the others.
+  Sessions in a folder named **Session Call** never rest: open one there and use it to reach the others. Sakin
+  makes that folder for you (`%USERPROFILE%\Session Call`, with the instructions in its `CLAUDE.md`); *Open
+  folder* in Settings › Claude mode takes you there.
 - **Apps Claude opened and forgot are put to Claude as a question.** Sakin isn't smart and doesn't pretend to be:
   when an app Claude opened has gone unused for 30 minutes and still holds 500 MB or more, it writes a question to
   `%LOCALAPPDATA%\Sakin\claude-asks.json`. The Session Call session passes it to the session that opened the app,

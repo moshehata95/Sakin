@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 1.5.1 — 2026-11-22
+
+- The **Session Call** folder now comes with Sakin: it is made on the first start (`%USERPROFILE%\Session Call`)
+  with its `CLAUDE.md`, the instructions for the session that never sleeps and passes Sakin's questions on.
+  Settings › Claude mode shows it with *Open folder*. Each new version updates the file, unless you have edited it.
+
 ## 1.5.0 — 2026-11-22
 
 - **Claude mode asks Claude.** When an app Claude opened (Photoshop, Premiere, a browser…) has gone unused for

@@ -29,6 +29,8 @@ internal sealed class Settings
     public int ClaudeSessionRestMin { get; set; } = 15; // a Claude session with nothing to do this long goes to sleep (0 = never)
     // sessions whose folder has one of these names are never put to sleep: the one you reach the others from
     public List<string> ClaudeKeepFolders { get; set; } = new() { "Session Call" };
+    public string ClaudeSessionCallDir { get; set; } = "";    // the Session Call folder Sakin made ("" = %USERPROFILE%\Session Call)
+    public string ClaudeSessionCallHash { get; set; } = "";   // the CLAUDE.md Sakin last wrote there, to tell your edits apart
     // an app Claude opened and then left alone this long, still holding this much memory, is put to Claude as a question
     public int ClaudeAskAfterMin { get; set; } = 30;    // 0 = never ask
     public int ClaudeAskMinMB { get; set; } = 500;

@@ -163,6 +163,7 @@ internal sealed class MainWindow : Form
             case "claude": { bool on = m.TryGetProperty("on", out var v) && v.ValueKind == JsonValueKind.True; _engine.Post(() => _engine.SetClaudeMode(on)); break; }
             case "claudeApp": { string k = Str("key"); bool on = m.TryGetProperty("on", out var v) && v.ValueKind == JsonValueKind.True; _engine.Post(() => _engine.SetClaudeApp(k, on)); break; }
             case "donate": Program.OpenDonate(); break;
+            case "sessionCall": SessionCall.OpenFolder(_settings); break;
             case "setSetting":
             {
                 string key = Str("key");

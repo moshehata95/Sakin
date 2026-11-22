@@ -1490,7 +1490,7 @@ internal sealed partial class Engine : IDisposable
                 busyCpuPct = _s.BusyCpuPct, busyGpuPct = _s.BusyGpuPct,
                 startWithWindows = _s.StartWithWindows, elevated = _s.Elevated,
                 respectAudio = _s.RespectAudio, batteryBoost = _s.BatteryBoost, lang = _s.Lang,
-                claudeLingerMin = _s.ClaudeLingerMin, claudeScreenOffMin = _s.ClaudeScreenOffMin, claudeSessionRestMin = _s.ClaudeSessionRestMin, claudeCool = _s.ClaudeCool, claudeQuiet = _s.ClaudeQuiet,
+                claudeLingerMin = _s.ClaudeLingerMin, claudeScreenOffMin = _s.ClaudeScreenOffMin, claudeSessionRestMin = _s.ClaudeSessionRestMin, sessionCallDir = SessionCall.Dir(_s), claudeCool = _s.ClaudeCool, claudeQuiet = _s.ClaudeQuiet,
             },
             mem = new { totalMB = _totalMB, availMB = _availMB, byState = by },
             cpu = _cpuTotal,

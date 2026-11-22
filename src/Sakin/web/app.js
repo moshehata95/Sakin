@@ -205,6 +205,7 @@
     for (const el of document.querySelectorAll("[data-set]")) el.checked = !!flags[el.dataset.set];
     for (const el of document.querySelectorAll("[data-out]")) el.textContent = S.settings[el.dataset.out];
     $("#aboutLine").textContent = L.aboutLine(S.version, S.admin, S.selfMB);
+    $("#sessionCallDir").textContent = S.settings.sessionCallDir || "";
 
     const band = $("#boostBand");
     band.hidden = !S.boost;
@@ -262,6 +263,7 @@
   $("#claudeBtn").addEventListener("click", () => send("claude", { on: !(S && S.claude) }));
   $("#claudeStop").addEventListener("click", () => send("claude", { on: false }));
   $("#donateBtn").addEventListener("click", () => send("donate"));
+  $("#sessionCallBtn").addEventListener("click", () => send("sessionCall"));
   $("#donateTop").addEventListener("click", () => send("donate"));
 
   $("#tabs").addEventListener("click", (e) => {
