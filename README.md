@@ -133,7 +133,7 @@ What runs:
   Sessions in a folder named **Session Call** never rest: open one there and use it to reach the others. Sakin
   makes that folder for you (`%USERPROFILE%\Session Call`, with the instructions in its `CLAUDE.md`); *Open
   folder* in Settings › Claude mode takes you there. Right-click any folder and choose **Open in Claude Code** to
-  start a session on it in the Claude app (on Windows 11 it's under *Show more options*).
+  start a session on it in the Claude app (on Windows 11 it's in the classic menu: Shift + right-click).
 - **Apps Claude opened and forgot are put to Claude as a question.** Sakin isn't smart and doesn't pretend to be:
   when an app Claude opened has gone unused for 30 minutes and still holds 500 MB or more, it writes a question to
   `%LOCALAPPDATA%\Sakin\claude-asks.json`. The Session Call session passes it to the session that opened the app,

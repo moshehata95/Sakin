@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 1.5.3 — 2026-11-22
+
+- **Fix:** *Open in Claude Code* didn't appear: the Claude app registers `claude://` as a packaged (Store-style)
+  protocol, with no command in the registry, so Sakin thought it wasn't installed. It now finds the app through its
+  package and takes the icon from there. The item is in the classic menu (Shift + right-click on Windows 11).
+
 ## 1.5.2 — 2026-11-22
 
 - Right-click a folder › **Open in Claude Code** starts a new Claude Code session on it in the Claude app. Added

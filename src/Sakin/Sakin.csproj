@@ -10,7 +10,7 @@
     <AssemblyName>Sakin</AssemblyName>
     <RootNamespace>Sakin</RootNamespace>
     <Product>Sakin</Product>
-    <Version>1.5.2</Version>
+    <Version>1.5.3</Version>
     <ApplicationIcon>sakin.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>

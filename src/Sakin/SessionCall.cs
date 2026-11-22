@@ -73,9 +73,10 @@ internal static class SessionCall
     {
         try
         {
-            string? cmd = Microsoft.Win32.Registry.ClassesRoot.OpenSubKey(@"claude\shell\open\command")?.GetValue("") as string;
-            if (string.IsNullOrWhiteSpace(cmd)) return;   // no Claude app: nothing to open
-            string icon = cmd.StartsWith('"') ? cmd[1..cmd.IndexOf('"', 1)] : cmd.Split(' ')[0];
+            // the Claude app registers claude:// as a packaged (MSIX) protocol: the key exists, but with no command
+            using (var proto = Microsoft.Win32.Registry.ClassesRoot.OpenSubKey("claude"))
+                if (proto?.GetValue("URL Protocol") == null) return;   // no Claude app: nothing to open
+            string icon = ClaudeAppExe();
             bool changed = false;
             for (int i = 0; i < MenuKeys.Length; i++)
             {
@@ -84,12 +85,35 @@ internal static class SessionCall
                 using var k = Microsoft.Win32.Registry.CurrentUser.CreateSubKey(MenuKeys[i]);
                 using var c = k.CreateSubKey("command");
                 if (k.GetValue("") as string != "Open in Claude Code") { k.SetValue("", "Open in Claude Code"); changed = true; }
-                if (k.GetValue("Icon") as string != icon) { k.SetValue("Icon", icon); changed = true; }
+                if (icon != "" && k.GetValue("Icon") as string != icon) { k.SetValue("Icon", icon); changed = true; }
                 if (c.GetValue("") as string != command) { c.SetValue("", command); changed = true; }
             }
             if (changed) SHChangeNotify(0x08000000, 0, IntPtr.Zero, IntPtr.Zero); // SHCNE_ASSOCCHANGED: Explorer re-reads menus
         }
         catch { }
+    }
+
+    /// <summary>The Claude app's exe, for the menu icon. Its folder carries the version, so it is looked up each time.</summary>
+    static string ClaudeAppExe()
+    {
+        try
+        {
+            foreach (var p in new Windows.Management.Deployment.PackageManager().FindPackagesForUser(string.Empty))
+            {
+                if (p.Id.Name != "Claude" || !p.Id.FamilyName.EndsWith("pzs8sxrjxfjjc")) continue;
+                string exe = Path.Combine(p.InstalledLocation.Path, "app", "Claude.exe");
+                if (File.Exists(exe)) return exe;
+            }
+        }
+        catch { }
+        // an unpackaged install: the protocol's own command
+        try
+        {
+            if (Microsoft.Win32.Registry.ClassesRoot.OpenSubKey(@"claude\shell\open\command")?.GetValue("") is string cmd && cmd.Length > 0)
+                return cmd.StartsWith('"') ? cmd[1..cmd.IndexOf('"', 1)] : cmd.Split(' ')[0];
+        }
+        catch { }
+        return "";
     }
 
     public static void RemoveMenu()
