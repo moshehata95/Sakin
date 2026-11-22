@@ -213,6 +213,8 @@
     const c = S.claude;
     $("#claudeBtn").classList.toggle("on", !!c);
     $("#claudeBtn").setAttribute("aria-pressed", String(!!c));
+    $("#claudeState").textContent = c ? L.on : L.off;
+    $("#claudeBtn").title = c ? L.claudeOnTip : L.claudeOffTip;
     $("#claudeBand").hidden = !c;
     if (c) {
       $("#claudePip").classList.toggle("quiet", !c.busy);
